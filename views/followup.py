@@ -6,7 +6,7 @@ from core import reports
 from views import ui
 
 ui.header("Citi follow-up", "Fees that are due but Citi has not invoiced. Sending this list each quarter is how "
-          "missing invoices get caught before they turn into multi-year write-offs.")
+          "missing invoices get caught before they turn into multi-year write-offs.", eyebrow="Records")
 if not ui.require_data():
     st.stop()
 
@@ -33,9 +33,9 @@ c.metric("Oldest unbilled fee", f"{int(fu['Days since due'].max())} days" if len
 
 st.dataframe(ui.style_col(fu, "", {}, money_cols=("Expected fee",),
                           date_cols=("Fee due date", "Issue date", "Maturity date"))
-             .map(lambda v: f"color: {ui.RED_TEXT}" if isinstance(v, str) and v.startswith("Citi has never") else "",
+             .map(lambda v: ui.cell_style("fail") if isinstance(v, str) and v.startswith("Citi has never") else "",
                   subset=["Why"]),
-             hide_index=True, use_container_width=True, height=420,
+             hide_index=True, width="stretch", height=420,
              column_config={"FA #": st.column_config.NumberColumn(format="%d")})
 
 x, y = st.columns(2)

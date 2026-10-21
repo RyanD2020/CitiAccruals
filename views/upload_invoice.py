@@ -9,7 +9,7 @@ from views import ui
 
 ui.header("Upload Citi invoice",
           "Drop in the PDF. Every fee line is matched one-to-one to a funding agreement and its anniversary: "
-          "green is an exact match, yellow posts but is worth a glance, red needs your decision.")
+          "green is an exact match, yellow posts but is worth a glance, red needs your decision.", eyebrow="Accrual")
 if not ui.require_data():
     st.stop()
 
@@ -34,7 +34,8 @@ def preview(raw: bytes):
     return key, cache[key]
 
 
-CHECK_KIND = {GREEN: "green", YELLOW: "yellow", RED: "red"}
+CHECK_RESULT = {GREEN: "Pass", YELLOW: "Review", RED: "Fail"}
+CHECK_KIND = {"Pass": "pass", "Review": "review", "Fail": "fail"}
 
 for up in files:
     raw = up.getvalue()
@@ -52,8 +53,9 @@ for up in files:
         meta.append(f"fees due {inv.arrears_start:%d %b %Y} to {inv.arrears_end:%d %b %Y}")
     st.write(", ".join(meta) + f". Total {ui.money(inv.fee_total)}.")
 
-    st.markdown(" ".join(ui.chip(f"{c.name}: {c.detail}", CHECK_KIND.get(c.status, "blue")) for c in result.checks),
-                unsafe_allow_html=True)
+    checks = pd.DataFrame([{"Check": c.name, "Result": CHECK_RESULT.get(c.status, "Review"), "Detail": c.detail}
+                           for c in result.checks])
+    ui.html_table(checks, chips={"Result": CHECK_KIND})
     if result.blocking:
         st.error(result.blocking[0].detail + " Open it on the Invoices page to review or reverse it.")
         st.page_link("views/invoices.py", label="Go to Invoices & payments")
@@ -61,9 +63,9 @@ for up in files:
 
     counts = result.counts
     st.markdown(
-        ui.chip(f"{counts[GREEN]} match", "green") + ui.chip(f"{counts[YELLOW]} review", "yellow")
-        + ui.chip(f"{counts[RED]} no match", "red")
-        + (ui.chip(f"{counts[PRIOR]} before tracking", "blue") if counts[PRIOR] else ""),
+        ui.chip(f"{counts[GREEN]} match", "match") + " " + ui.chip(f"{counts[YELLOW]} review", "review") + " "
+        + ui.chip(f"{counts[RED]} no match", "nomatch")
+        + (" " + ui.chip(f"{counts[PRIOR]} before tracking", "plain") if counts[PRIOR] else ""),
         unsafe_allow_html=True)
 
     d = ui.data()
@@ -83,7 +85,7 @@ for up in files:
     table = pd.DataFrame(rows)
     st.dataframe(ui.style_col(table, "Result", ui.RESULT_STYLE, money_cols=("Billed", "Expected"),
                               date_cols=("Citi maturity", "Citi fee date", "Anniversary")),
-                 hide_index=True, use_container_width=True,
+                 hide_index=True, width="stretch",
                  column_config={"Matched FA": st.column_config.NumberColumn(format="%d"),
                                 "Notes": st.column_config.TextColumn(width="large")})
 
@@ -93,7 +95,7 @@ for up in files:
             nb = result.not_billed.rename(columns={"fa_number": "FA #", "series": "Series", "event_date": "Due",
                                                    "expected_amount": "Fee"})
             st.dataframe(ui.style_col(nb, "", {}, money_cols=("Fee",), date_cols=("Due",)), hide_index=True,
-                         use_container_width=True)
+                         width="stretch")
             st.caption("These stay in the accrual and appear on the Citi follow-up list.")
 
     overrides = {}

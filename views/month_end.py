@@ -8,7 +8,7 @@ from core.dates import last_completed_month_end, previous_month_end
 from views import ui
 
 ui.header("Month-end report", "The accrual at month-end with its rollforward. Finalizing saves a frozen copy "
-          "so the reported number can always be reproduced.")
+          "so the reported number can always be reproduced.", eyebrow="Accrual")
 if not ui.require_data():
     st.stop()
 
@@ -23,30 +23,31 @@ out = f[f["outstanding"]]
 
 c1, c2 = st.columns([1, 1.4])
 with c1:
-    st.markdown(f'<div class="nyl-big">{ui.money(roll["closing"])}</div>'
-                f'<div class="nyl-big-label">accrual at {as_of:%d %B %Y}</div>', unsafe_allow_html=True)
+    ui.kpi_cards([(f"Accrual at {as_of:%d %B %Y}", ui.money(roll["closing"]), f"{len(out)} fees")], band=False)
+    st.markdown(f"**Rollforward from {prev:%d %B %Y}**")
     rf = pd.DataFrame({"": ["Opening accrual", "New fees due", "Paid", "Written off", "Closing accrual"],
                        "Amount": [roll["opening"], roll["new_fees"], -roll["paid"], -roll["written_off"], roll["closing"]]})
-    st.dataframe(ui.style_col(rf, "", {}, money_cols=("Amount",)), hide_index=True, use_container_width=True)
-    st.caption(f"Opening is {prev:%d %B %Y}." + ("" if roll["check"] == 0 else
-                                                  f" Rollforward difference {ui.money(roll['check'])}: review Exceptions."))
+    ui.html_table(rf, money_cols=("Amount",), total_last=True)
+    st.markdown("Check against the outstanding detail: " + ui.money(roll["check"]) + " "
+                + (ui.chip("Pass", "pass") if roll["check"] == 0 else ui.chip("Review exceptions", "fail")),
+                unsafe_allow_html=True)
 with c2:
     st.markdown("**By status**")
     bs = out.groupby("status")["expected_amount"].agg(["count", "sum"]).reset_index()
     bs.columns = ["Status", "Fees", "Amount"]
-    st.dataframe(ui.style_col(bs, "Status", ui.STATUS_STYLE, money_cols=("Amount",)), hide_index=True,
-                 use_container_width=True)
+    ui.html_table(bs, money_cols=("Amount",), chips={"Status": ui.STATUS_KIND})
     st.markdown("**By fee year**")
     by = out.groupby("fee_year")["expected_amount"].agg(["count", "sum"]).reset_index()
     by.columns = ["Fee year", "Fees", "Amount"]
     by["Fee year"] = by["Fee year"].astype(str)
-    st.dataframe(ui.style_col(by, "", {}, money_cols=("Amount",)), hide_index=True, use_container_width=True)
+    by.loc[len(by)] = ["Total", int(by["Fees"].sum()), float(by["Amount"].sum())]
+    ui.html_table(by, money_cols=("Amount",), total_last=True)
 
 st.markdown("**Outstanding detail**")
 det = reports._detail_frame(out)
 st.dataframe(ui.style_col(det, "Status", ui.STATUS_STYLE, money_cols=("Amount",),
                           date_cols=("Issue date", "Maturity date", "Fee due date", "Approved", "Paid")),
-             hide_index=True, use_container_width=True, height=380,
+             hide_index=True, width="stretch", height=380,
              column_config={"FA #": st.column_config.NumberColumn(format="%d")})
 
 xlsx = reports.accrual_workbook(as_of, lg, roll, d["invoices"], d["data_issues"], ui.user_display())
@@ -56,7 +57,7 @@ a, b = st.columns(2)
 a.download_button("Download Excel report", xlsx, file_name=f"Citi_accrual_{as_of.isoformat()}.xlsx", type="primary")
 with b:
     if len(existing):
-        st.markdown(ui.chip("Finalized", "green") + f" by {existing['created_by'].iloc[-1]} on "
+        st.markdown(ui.chip("Finalized", "pass") + f" by {existing['created_by'].iloc[-1]} on "
                     f"{existing['created_at'].iloc[-1]:%d %b %Y}: {ui.money(existing['total_outstanding'].iloc[-1])}",
                     unsafe_allow_html=True)
     confirm = st.checkbox(f"Finalize {as_of:%d %B %Y} at {ui.money(roll['closing'])}"

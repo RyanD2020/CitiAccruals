@@ -1,7 +1,16 @@
-"""Shared Streamlit helpers: one cached service, one cached data load, user identity and styling."""
+"""Shared Streamlit helpers: one cached service, one cached data load, user identity and the New York Life design.
+
+The design lives in design/nyl.css (rules in design/BRAND.md); app.py injects it once per run with css().
+The helpers below render branded HTML with st.html, which sanitises it (no scripts, no SVG).
+"""
 from __future__ import annotations
 
+import base64
+import html as _html
+import re
 from datetime import date
+from functools import lru_cache
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -13,53 +22,82 @@ from core.matcher import GREEN, MANUAL, PRIOR, RED, YELLOW
 from core.services import Service
 from core.storage import FileStore
 
-DARK_BLUE, BLUE, GREEN_HEX, LIGHT_GREEN = "#000A62", "#0468FF", "#016355", "#A5EFBF"
-ORANGE, LIGHT_ORANGE, GREY = "#FF9522", "#FFE8CF", "#E3E0DD"
-# Red is not in the NYL palette; it is used only as the "needs a decision" signal the business asked for.
-RED_TEXT, RED_BG = "#9B111E", "#FBE3E4"
+ROOT = Path(__file__).resolve().parent.parent
+DESIGN_CSS = ROOT / "design" / "nyl.css"
+LOGO = ROOT / "assets" / "nyl_logo.png"
+
+DARK_BLUE, BLUE, GREEN_HEX, LIGHT_GREEN, GREY = "#000A62", "#0468FF", "#016355", "#A5EFBF", "#E3E0DD"
+AXIS_GREY = "#888888"
+
+# Status chip colours (design/BRAND.md): kind -> (background, text)
+CHIP_COLORS = {
+    "pass": ("#A5EFBF", "#016355"),
+    "review": ("#FFE8CF", "#6B3B00"),
+    "fail": ("#FBE3E4", "#9B111E"),
+    "info": ("#DCEBFF", "#000A62"),
+}
+CHIP_KINDS = {"pass", "match", "review", "fail", "nomatch", "info", "approved", "manual", "plain"}
+
+
+def cell_style(kind: str) -> str:
+    """Styler CSS for a dataframe cell shown as a chip colour ('' for plain)."""
+    if kind not in CHIP_COLORS:
+        return ""
+    bg, fg = CHIP_COLORS[kind]
+    return f"background-color: {bg}; color: {fg}; font-weight: 600"
+
 
 RESULT_LABEL = {GREEN: "Match", YELLOW: "Review", RED: "No match", MANUAL: "Manual match", PRIOR: "Before tracking"}
+RESULT_KIND = {"Match": "match", "Review": "review", "No match": "nomatch", "Manual match": "manual",
+               "Before tracking": "plain"}
 RESULT_STYLE = {
-    "Match": f"background-color: {LIGHT_GREEN}; color: {GREEN_HEX}; font-weight: 600",
-    "Review": f"background-color: {LIGHT_ORANGE}; color: #7A4300; font-weight: 600",
-    "No match": f"background-color: {RED_BG}; color: {RED_TEXT}; font-weight: 600",
-    "Manual match": f"background-color: #DCEBFF; color: {DARK_BLUE}; font-weight: 600",
-    "Before tracking": f"background-color: #F2F2F2; color: #444444",
+    "Match": cell_style("pass"), "Review": cell_style("review"), "No match": cell_style("fail"),
+    "Manual match": cell_style("info"), "Before tracking": "",
+}
+STATUS_KIND = {
+    engine.STATUS_PAID: "pass", engine.STATUS_APPROVED: "approved", engine.STATUS_INVOICED: "info",
+    engine.STATUS_DUE: "review", engine.STATUS_NOT_DUE: "plain", engine.STATUS_WRITTEN_OFF: "plain",
 }
 STATUS_STYLE = {
-    engine.STATUS_PAID: f"background-color: {LIGHT_GREEN}; color: {GREEN_HEX}",
-    engine.STATUS_APPROVED: f"background-color: #DCEBFF; color: {DARK_BLUE}",
-    engine.STATUS_INVOICED: f"background-color: #DCEBFF; color: {DARK_BLUE}",
-    engine.STATUS_DUE: f"background-color: {LIGHT_ORANGE}; color: #7A4300",
-    engine.STATUS_NOT_DUE: "color: #555555",
-    engine.STATUS_WRITTEN_OFF: f"background-color: #F2F2F2; color: #444444; text-decoration: line-through",
+    engine.STATUS_PAID: cell_style("pass"), engine.STATUS_APPROVED: cell_style("info"),
+    engine.STATUS_INVOICED: cell_style("info"), engine.STATUS_DUE: cell_style("review"),
+    engine.STATUS_NOT_DUE: "", engine.STATUS_WRITTEN_OFF: "",
 }
 
-CSS = f"""
-<style>
-html, body, [class*="css"], .stMarkdown, .stText, p, li, label, input, textarea, button {{
-  font-family: Arial, Helvetica, "Liberation Sans", sans-serif;
-}}
-h1, h2, h3, h4, [data-testid="stHeading"] * {{
-  font-family: Georgia, "Times New Roman", serif !important; color: {DARK_BLUE} !important; font-weight: 400 !important;
-}}
-h1 {{ font-size: 2.2rem !important; letter-spacing: -0.01em; }}
-.nyl-eyebrow {{ color: {BLUE}; font-family: Georgia, serif; font-size: 1.05rem; margin-bottom: -0.6rem; }}
-.nyl-lede {{ color: #000; max-width: 68ch; margin-top: -0.3rem; }}
-[data-testid="stMetricValue"] {{ font-family: Georgia, serif; color: {DARK_BLUE}; }}
-[data-testid="stMetricLabel"] p {{ color: #000; }}
-.nyl-chip {{ display:inline-block; padding: 0.15rem 0.55rem; border-radius: 0.8rem; font-size: 0.85rem; margin-right: 0.35rem; }}
-.nyl-green {{ background:{LIGHT_GREEN}; color:{GREEN_HEX}; }}
-.nyl-yellow {{ background:{LIGHT_ORANGE}; color:#7A4300; }}
-.nyl-red {{ background:{RED_BG}; color:{RED_TEXT}; }}
-.nyl-blue {{ background:#DCEBFF; color:{DARK_BLUE}; }}
-.nyl-big {{ font-family: Georgia, serif; color:{DARK_BLUE}; font-size: 3rem; line-height: 1.05; }}
-.nyl-big-label {{ color:#000; font-size: 0.95rem; }}
-a {{ color: {BLUE}; }} a:hover {{ color: {DARK_BLUE}; }}
-</style>
-"""
+
+# ------------------------------------------------------------------ design
+@lru_cache(maxsize=1)
+def _design_source() -> str:
+    return DESIGN_CSS.read_text(encoding="utf-8")
 
 
+def _token_block(css: str, selector: str) -> str:
+    m = re.search(r"(?m)^" + re.escape(selector) + r" \{(.*?)^\}", css, re.S)
+    return m.group(1) if m else ""
+
+
+def css() -> str:
+    """design/nyl.css with its colour tokens pinned to the Streamlit theme the user picked (light or dark).
+
+    nyl.css on its own follows the operating system's preference; inside the app the Streamlit theme decides,
+    so a user who picks dark in the settings menu gets dark tokens even on a light OS, and vice versa.
+    """
+    src = _design_source()
+    dark = getattr(st.context.theme, "type", None) == "dark"
+    tokens = _token_block(src, ':root[data-theme="dark"]' if dark else ":root")
+    return f"<style>{src}\n:root:root:root {{{tokens}}}</style>"
+
+
+@lru_cache(maxsize=1)
+def _logo_uri() -> str:
+    return "data:image/png;base64," + base64.b64encode(LOGO.read_bytes()).decode("ascii")
+
+
+def esc(v) -> str:
+    return _html.escape("" if v is None else str(v))
+
+
+# ------------------------------------------------------------------ data
 @st.cache_resource(show_spinner="Connecting to the accrual tables...")
 def service() -> Service:
     s = load_settings()
@@ -102,35 +140,6 @@ def user_display() -> str:
     return name
 
 
-def header(title: str, lede: str | None = None, eyebrow: str | None = None) -> None:
-    if eyebrow:
-        st.markdown(f'<div class="nyl-eyebrow">{eyebrow}</div>', unsafe_allow_html=True)
-    st.title(title)
-    if lede:
-        st.markdown(f'<p class="nyl-lede">{lede}</p>', unsafe_allow_html=True)
-
-
-def money(v) -> str:
-    try:
-        return f"${float(v):,.0f}"
-    except (TypeError, ValueError):
-        return ""
-
-
-def chip(text: str, kind: str) -> str:
-    return f'<span class="nyl-chip nyl-{kind}">{text}</span>'
-
-
-def style_col(df: pd.DataFrame, col: str, mapping: dict, money_cols=(), date_cols=()):
-    fmt = {c: (lambda v: money(v) if pd.notna(v) else "") for c in money_cols if c in df.columns}
-    fmt.update({c: (lambda v: v.strftime("%d-%b-%Y") if hasattr(v, "strftime") else ("" if v is None or (isinstance(v, float) and pd.isna(v)) else v))
-                for c in date_cols if c in df.columns})
-    sty = df.style.format(fmt, na_rep="")
-    if col in df.columns:
-        sty = sty.map(lambda v: mapping.get(v, ""), subset=[col])
-    return sty
-
-
 def ledger(as_of: date) -> engine.Ledger:
     d = data()
     return engine.ledger(d["fee_events"], d["contracts"], d["invoices"], d["programs"], as_of)
@@ -144,11 +153,133 @@ def require_data() -> bool:
     return True
 
 
+# ------------------------------------------------------------------ formatting
+def money(v) -> str:
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return ""
+    if pd.isna(f):
+        return ""
+    n = round(f)  # whole dollars; also turns -0.0 (e.g. -paid when nothing was paid) into 0
+    return f"-${abs(n):,}" if n < 0 else f"${n:,}"
+
+
+def fmt_date(v) -> str:
+    return v.strftime("%d-%b-%Y") if hasattr(v, "strftime") and not pd.isna(v) else ""
+
+
 def event_label(r) -> str:
     g = r.get if isinstance(r, dict) else (lambda k, d=None: getattr(r, k, d))
     return (f"{g('series')}, FA {int(g('fa_number'))}, due {g('event_date'):%d-%b-%Y}, "
             f"{money(g('expected_amount'))}")
 
 
+def style_col(df: pd.DataFrame, col: str, mapping: dict, money_cols=(), date_cols=()):
+    """Styler for st.dataframe: money and date formats plus chip colours on one column."""
+    fmt = {c: (lambda v: money(v) if pd.notna(v) else "") for c in money_cols if c in df.columns}
+    fmt.update({c: (lambda v: v.strftime("%d-%b-%Y") if hasattr(v, "strftime") else ("" if v is None or (isinstance(v, float) and pd.isna(v)) else v))
+                for c in date_cols if c in df.columns})
+    sty = df.style.format(fmt, na_rep="")
+    if col in df.columns:
+        sty = sty.map(lambda v: mapping.get(v, ""), subset=[col])
+    return sty
+
+
 def reason_box(key: str, placeholder: str = "Why are you making this change?") -> str:
     return st.text_input("Reason (saved to the audit log)", key=key, placeholder=placeholder)
+
+
+# ------------------------------------------------------------------ branded HTML
+def header(title: str, lede: str | None = None, eyebrow: str | None = None) -> None:
+    """Blue Georgia eyebrow above a Dark Blue Georgia title (the title is a real heading for accessibility)."""
+    if eyebrow:
+        st.markdown(f'<p class="nyl-eyebrow">{esc(eyebrow)}</p>', unsafe_allow_html=True)
+    st.title(title)
+    if lede:
+        st.markdown(f'<p class="nyl-lede">{esc(lede)}</p>', unsafe_allow_html=True)
+
+
+def chip(text: str, kind: str) -> str:
+    if kind not in CHIP_KINDS:
+        raise ValueError(f"Unknown chip kind {kind!r}; use one of {sorted(CHIP_KINDS)}")
+    return f'<span class="nyl-chip nyl-chip--{kind}">{esc(text)}</span>'
+
+
+def hero(eyebrow: str, title: str, figure: str, text: str, checks: list[tuple[str, str, str, str]],
+         checks_title: str = "Reconciliation checks") -> None:
+    """The signature diagonal: figure on the Dark Blue field, checks on the Grey side.
+
+    checks: (label, detail, chip text, chip kind) per row.
+    """
+    rows = "".join(
+        f'<li><span>{esc(label)}<br><span class="nyl-muted">{esc(detail)}</span></span>{chip(ctext, kind)}</li>'
+        for label, detail, ctext, kind in checks)
+    st.html(
+        '<section class="nyl-hero"><div class="nyl-hero__field"></div><div class="nyl-hero__inner">'
+        f'<div class="nyl-hero__main"><p class="nyl-eyebrow">{esc(eyebrow)}</p>'
+        f'<div class="nyl-title">{esc(title)}</div><div class="nyl-figure">{esc(figure)}</div><p>{esc(text)}</p></div>'
+        f'<div class="nyl-hero__side"><h3>{esc(checks_title)}</h3><ul class="nyl-checks">{rows}</ul></div>'
+        '</div></section>')
+
+
+def kpi_cards(cards: list[tuple[str, str, str]], band: bool = True) -> None:
+    """KPI cards (label, value, note), on a Grey band by default."""
+    cols = min(max(len(cards), 1), 4)
+    body = "".join(
+        f'<div class="nyl-card"><p class="nyl-kpi__label">{esc(label)}</p><div class="nyl-kpi__value">{esc(value)}</div>'
+        + (f'<div class="nyl-kpi__note">{esc(note)}</div>' if note else "") + "</div>"
+        for label, value, note in cards)
+    grid = f'<div class="nyl-grid nyl-grid--{cols}">{body}</div>'
+    st.html(f'<div class="nyl-band">{grid}</div>' if band else grid)
+
+
+DEFAULT_STEPS = [
+    ("Upload", "Drop in the Citi invoice PDF"),
+    ("Match", "Each line matched one to one to a fee"),
+    ("Approve and pay", "Approval and payment dates recorded"),
+    ("Report", "Month-end accrual and Excel package"),
+]
+
+
+def steps(items: list[tuple[str, str]] | None = None) -> None:
+    """The four-step chevron process."""
+    st.html('<ol class="nyl-steps">' + "".join(
+        f'<li class="nyl-step"><span class="nyl-step__title">{esc(t)}</span><span class="nyl-step__text">{esc(x)}</span></li>'
+        for t, x in (items or DEFAULT_STEPS)) + "</ol>")
+
+
+def html_table(df: pd.DataFrame, money_cols=(), date_cols=(), chips: dict[str, dict] | None = None,
+               total_last: bool = False) -> None:
+    """Small read-only table: Dark Blue header, thin Grey rules, numbers right-aligned.
+
+    chips: column -> {value: chip kind} to show that column's values as chips.
+    total_last: show the last row as a total.
+    """
+    chips = chips or {}
+    num = {c for c in df.columns if c in money_cols or pd.api.types.is_numeric_dtype(df[c])}
+
+    def cell(col, v):
+        if col in money_cols:
+            return money(v)
+        if col in date_cols:
+            return esc(fmt_date(v))
+        if col in chips and v in chips[col]:
+            return chip(str(v), chips[col][v])
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return ""
+        return esc(v)
+
+    head = "".join(f'<th class="{"num" if c in num else ""}">{esc(c)}</th>' for c in df.columns)
+    body = []
+    for i, r in enumerate(df.itertuples(index=False)):
+        cls = ' class="is-total"' if total_last and i == len(df) - 1 else ""
+        body.append(f"<tr{cls}>" + "".join(
+            f'<td class="{"num" if c in num else ""}">{cell(c, v)}</td>' for c, v in zip(df.columns, r)) + "</tr>")
+    st.html(f'<div class="nyl-table-wrap"><table class="nyl-table"><thead><tr>{head}</tr></thead>'
+            f'<tbody>{"".join(body)}</tbody></table></div>')
+
+
+def footer() -> None:
+    st.html(f'<footer class="nyl-footer"><img class="nyl-footer__logo" src="{_logo_uri()}" alt="New York Life">'
+            '<span>New York Life Insurance Company. For internal use only.</span></footer>')

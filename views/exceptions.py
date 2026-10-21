@@ -5,7 +5,8 @@ from core import reports
 from views import ui
 
 ui.header("Exceptions", "Anything the tool could not settle on its own: unmatched invoice lines, missing "
-          "documents, and differences found when the old tracker was loaded. Resolve each with a short note.")
+          "documents, and differences found when the old tracker was loaded. Resolve each with a short note.",
+          eyebrow="Records")
 if not ui.require_data():
     st.stop()
 
@@ -26,12 +27,12 @@ if view.empty:
 
 summary = view.groupby("category").agg(Items=("issue_id", "count"), Impact=("amount_impact", "sum")).reset_index()
 summary.columns = ["Category", "Items", "Amount impact"]
-st.dataframe(ui.style_col(summary, "", {}, money_cols=("Amount impact",)), hide_index=True, use_container_width=False)
+ui.html_table(summary, money_cols=("Amount impact",))
 
 table = pd.DataFrame({"Category": view["category"], "Reference": view["entity_id"], "Description": view["description"],
                       "Amount impact": view["amount_impact"], "Status": view["status"],
                       "Resolution": view["resolution"], "Resolved by": view["resolved_by"]})
-st.dataframe(ui.style_col(table, "", {}, money_cols=("Amount impact",)), hide_index=True, use_container_width=True,
+st.dataframe(ui.style_col(table, "", {}, money_cols=("Amount impact",)), hide_index=True, width="stretch",
              height=380, column_config={"Description": st.column_config.TextColumn(width="large")})
 st.download_button("Download as Excel", reports.xlsx_from_frames({"Exceptions": table}, money_cols=("Amount impact",)),
                    file_name="Citi_accrual_exceptions.xlsx")

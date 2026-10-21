@@ -6,7 +6,7 @@ from core.parsers import file_hash, parse_invoice
 from views import ui
 
 ui.header("Invoices & payments", "Record approvals and payments, fix line matches, and attach missing PDFs. "
-          "One payment covers every fee on the invoice.")
+          "One payment covers every fee on the invoice.", eyebrow="Accrual")
 if not ui.require_data():
     st.stop()
 
@@ -48,9 +48,9 @@ STATUS = {"Paid": ui.STATUS_STYLE["Paid"], "Approved": ui.STATUS_STYLE["Approved
           "Awaiting approval": ui.STATUS_STYLE["Due - not invoiced"]}
 st.dataframe(ui.style_col(table, "Status", STATUS, money_cols=("Total",),
                           date_cols=("Invoice date", "Fees from", "Fees to", "Approved", "Paid"))
-             .map(lambda v: f"color: {ui.RED_TEXT}; font-weight: 600" if isinstance(v, (int, float)) and v > 0 else "",
+             .map(lambda v: ui.cell_style("fail") if isinstance(v, (int, float)) and v > 0 else "",
                   subset=["No match"]),
-             hide_index=True, use_container_width=True)
+             hide_index=True, width="stretch")
 
 unpaid = inv[inv["payment_date"].isna()]
 if len(unpaid):
@@ -141,7 +141,7 @@ lt = pd.DataFrame({
     "Notes": il["match_notes"],
 })
 st.dataframe(ui.style_col(lt, "Result", ui.RESULT_STYLE, money_cols=("Amount",), date_cols=("Citi fee date",)),
-             hide_index=True, use_container_width=True,
+             hide_index=True, width="stretch",
              column_config={"FA #": st.column_config.NumberColumn(format="%d"),
                             "Notes": st.column_config.TextColumn(width="large")})
 

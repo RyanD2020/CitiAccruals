@@ -5,7 +5,8 @@ from core import reports
 from core.parsers import classify_file, unpack_zip
 from views import ui
 
-ui.header("Setup", "Load the existing folder once, then adjust program fees and accrual scope here.")
+ui.header("Setup", "Load the existing folder once, then adjust program fees and accrual scope here.",
+          eyebrow="Admin")
 svc = ui.service()
 d = ui.data()
 s = svc.settings
@@ -13,7 +14,7 @@ s = svc.settings
 # --------------------------------------------------------------------------- initial load
 st.subheader("Initial load")
 if not d["contracts"].empty:
-    st.markdown(ui.chip("Loaded", "green") + f" {len(d['contracts'])} agreements, {len(d['fee_events'])} fees, "
+    st.markdown(ui.chip("Loaded", "pass") + f" {len(d['contracts'])} agreements, {len(d['fee_events'])} fees, "
                 f"{len(d['invoices'])} invoices.", unsafe_allow_html=True)
     last = st.session_state.get("load_report")
 else:
@@ -30,7 +31,7 @@ else:
     if files:
         cl = [classify_file(n, b) for n, b in files]
         kinds = pd.DataFrame([{"File": c.name, "Recognised as": c.kind.replace("_", " "), "Note": c.detail} for c in cl])
-        st.dataframe(kinds, hide_index=True, use_container_width=True)
+        st.dataframe(kinds, hide_index=True, width="stretch")
         has_reg = any(c.kind == "fa_register" for c in cl)
         has_trk = any(c.kind == "tracker" for c in cl)
         if not (has_reg or has_trk):
@@ -52,7 +53,7 @@ if last:
                                            "lines": "Lines", "green": "Match", "yellow": "Review", "red": "No match",
                                            "prior": "Before tracking", "manual": "Manual"})
     st.dataframe(ui.style_col(inv, "", {}, money_cols=("Total",), date_cols=("Date",)), hide_index=True,
-                 use_container_width=True)
+                 width="stretch")
     if "bridge_summary" in last:
         b = last["bridge_summary"]
         st.markdown(f"**Opening balance at {b['as_of']:%d %B %Y}.** The tracker reported {ui.money(b['tracker_total'])}; "
@@ -62,12 +63,13 @@ if last:
         if len(br):
             grp = br.groupby("category")["difference"].agg(["count", "sum"]).reset_index()
             grp.columns = ["Category", "Items", "Amount"]
-            st.dataframe(ui.style_col(grp, "", {}, money_cols=("Amount",)), hide_index=True)
+            grp.loc[len(grp)] = ["Total", int(grp["Items"].sum()), float(grp["Amount"].sum())]
+            ui.html_table(grp, money_cols=("Amount",), total_last=True)
             show = br.rename(columns={"fa_number": "FA #", "series": "Series", "fee_year": "Tracker tab",
                                       "tracker_owed": "Tracker owed", "tool_owed": "Tool owed", "difference": "Difference",
                                       "category": "Category", "explanation": "Explanation"})
             st.dataframe(ui.style_col(show, "", {}, money_cols=("Tracker owed", "Tool owed", "Difference")),
-                         hide_index=True, use_container_width=True,
+                         hide_index=True, width="stretch",
                          column_config={"FA #": st.column_config.NumberColumn(format="%d"),
                                         "Explanation": st.column_config.TextColumn(width="large")})
             st.download_button("Download opening balance bridge (Excel)",
@@ -82,7 +84,7 @@ st.subheader("Programs and fees")
 st.write("Changing a fee reprices every fee not yet invoiced. Accrual scope controls which programs count toward "
          "the reported accrual; invoices for all programs are still matched and stored.")
 p = d["programs"][["program_code", "short_name", "program_name", "annual_fee", "include_in_accrual"]].copy()
-edited = st.data_editor(p, hide_index=True, use_container_width=True, disabled=["program_code"],
+edited = st.data_editor(p, hide_index=True, width="stretch", disabled=["program_code"],
                         column_config={"program_code": "Citi code", "short_name": "Name", "program_name": "Program",
                                        "annual_fee": st.column_config.NumberColumn("Annual fee", format="$%d"),
                                        "include_in_accrual": "In accrual"}, key="prog_ed", num_rows="dynamic")

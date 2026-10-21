@@ -9,7 +9,7 @@ st.set_page_config(page_title="Citi Fee Accruals", page_icon=os.path.join(HERE, 
 
 from views import ui  # noqa: E402  (after set_page_config)
 
-st.markdown(ui.CSS, unsafe_allow_html=True)
+st.html(ui.css())  # design/nyl.css, once per run; style-only HTML takes no space on the page
 st.logo(os.path.join(HERE, "assets", "nyl_logo.png"), size="large")
 
 pages = {
@@ -27,12 +27,15 @@ pages = {
     ],
     "Admin": [st.Page("views/setup.py", title="Setup")],
 }
-nav = st.navigation(pages)
+nav = st.navigation(pages, position="top")
 
 with st.sidebar:
     st.caption(f"Signed in as {ui.user()}")
-    if st.button("Refresh data", use_container_width=True):
+    if st.button("Refresh data", width="stretch"):
         ui.refresh()
         st.rerun()
 
-nav.run()
+try:
+    nav.run()
+finally:
+    ui.footer()  # also after a page calls st.stop()

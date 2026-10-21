@@ -9,7 +9,7 @@ from core.parsers import parse_fa_register, parse_term_sheet
 from views import ui
 
 ui.header("Funding agreements", "Every FA and its fee schedule. New agreements come from a term sheet or the "
-          "FA register; the schedule of annual fees is generated automatically.")
+          "FA register; the schedule of annual fees is generated automatically.", eyebrow="Records")
 svc = ui.service()
 d = ui.data()
 today = date.today()
@@ -52,7 +52,7 @@ with tab_list:
             "Last invoice": view["last_billed"],
         }).sort_values("FA #", ascending=False)
         st.dataframe(ui.style_col(table, "", {}, money_cols=("Outstanding",), date_cols=("Issue date", "Maturity")),
-                     hide_index=True, use_container_width=True, height=360,
+                     hide_index=True, width="stretch", height=360,
                      column_config={"FA #": st.column_config.NumberColumn(format="%d"),
                                     "Reopening of": st.column_config.NumberColumn(format="%d")})
         st.caption(f"{len(table)} agreements, {ui.money(table['Outstanding'].sum())} outstanding.")
@@ -71,7 +71,7 @@ with tab_list:
                            "Status": evs["status"], "Invoice": evs["invoice_no"], "Approved": evs["approval_date"],
                            "Paid": evs["payment_date"], "Note": evs["write_off_reason"]})
         st.dataframe(ui.style_col(et, "Status", ui.STATUS_STYLE, money_cols=("Fee",), date_cols=("Due", "Approved", "Paid")),
-                     hide_index=True, use_container_width=True)
+                     hide_index=True, width="stretch")
 
         e1, e2 = st.columns(2)
         with e1, st.form(f"edit_{fa}"):
@@ -156,7 +156,7 @@ def contract_form(prefix: str, defaults: dict, source: str, doc_bytes=None, doc_
         sp = schedule_preview(pcode, issue, mat)
         st.caption(f"Fee schedule that will be created: {len(sp)} fees, {ui.money(sp['Fee'].sum())}.")
         st.dataframe(ui.style_col(sp, "", {}, money_cols=("Fee",), date_cols=("Due",)), hide_index=True,
-                     use_container_width=False)
+                     width="content")
     if submitted:
         try:
             doc_path = svc.files.save("term_sheets", doc_name, doc_bytes) if doc_bytes else None
@@ -234,14 +234,14 @@ with tab_reg:
                     nv = new[["fa_number", "series", "program_code", "issue_date", "maturity_date", "isin",
                               "reopening_of"]].copy()
                     nv.insert(0, "Add", True)
-                    sel_new = st.data_editor(nv, hide_index=True, use_container_width=True, disabled=list(nv.columns[1:]),
+                    sel_new = st.data_editor(nv, hide_index=True, width="stretch", disabled=list(nv.columns[1:]),
                                              key="reg_new")
                 sel_ch = pd.DataFrame()
                 if len(changed):
                     st.markdown(f"**{len(changed)} changed field(s)**")
                     cv = changed.copy()
                     cv.insert(0, "Apply", True)
-                    sel_ch = st.data_editor(cv, hide_index=True, use_container_width=True, disabled=list(cv.columns[1:]),
+                    sel_ch = st.data_editor(cv, hide_index=True, width="stretch", disabled=list(cv.columns[1:]),
                                             key="reg_ch")
                 reason = st.text_input("Reason (saved to the audit log)", value="FA register sync")
                 if st.button("Apply selected", type="primary"):

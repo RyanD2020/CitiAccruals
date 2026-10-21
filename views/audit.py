@@ -7,7 +7,7 @@ from core import reports
 from views import ui
 
 ui.header("Audit history", "Every change, who made it, when, and why. Field changes can be put back with one click; "
-          "invoice postings are undone with Reverse invoice.")
+          "invoice postings are undone with Reverse invoice.", eyebrow="Records")
 svc = ui.service()
 log = ui.data()["audit_log"].sort_values("ts", ascending=False)
 if log.empty:
@@ -30,7 +30,7 @@ if q:
 table = pd.DataFrame({"When": v["ts"], "User": v["user_name"], "Action": v["action"], "Record": v["entity"],
                       "Key": v["entity_id"], "Field": v["field"], "Old value": v["old_value"],
                       "New value": v["new_value"], "Reason": v["reason"]})
-st.dataframe(table, hide_index=True, use_container_width=True, height=420,
+st.dataframe(table, hide_index=True, width="stretch", height=420,
              column_config={"When": st.column_config.DatetimeColumn(format="DD MMM YYYY HH:mm"),
                             "Old value": st.column_config.TextColumn(width="medium"),
                             "New value": st.column_config.TextColumn(width="medium")})
@@ -47,7 +47,7 @@ else:
     with st.form("revert"):
         pick = st.selectbox("Change", list(rev["audit_id"]), format_func=lambda a: (
             lambda r: f"{r['ts']:%d %b %Y %H:%M}, {r['user_name']}: {r['entity']} {r['entity_id']} {r['field']} "
-                      f"{r['old_value']} -> {r['new_value']}")(rev.loc[rev["audit_id"] == a].iloc[0]))
+                      f"{r['old_value']} to {r['new_value']}")(rev.loc[rev["audit_id"] == a].iloc[0]))
         reason = st.text_input("Reason (saved to the audit log)")
         if st.form_submit_button("Revert this change", type="primary"):
             if not reason:
