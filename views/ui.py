@@ -386,7 +386,7 @@ def bridge_reason(explanation: str, category: str) -> str:
 
 _RECORD = {"contracts": "FA", "invoices": "Invoice", "fee_events": "Fee", "invoice_lines": "Invoice line",
            "snapshots": "Month-end", "programs": "Program", "settings": "Setting", "data_issues": "Exception",
-           "documents": "Document", "system": "System"}
+           "documents": "Document", "system": "System", "tracker_row": "Tracker row"}
 
 
 def audit_record(entity: str, entity_id) -> str:

@@ -26,6 +26,7 @@ team for the internal mirror.
 | Register updated | Funding agreements > Sync FA register | New FAs and changed dates shown for approval |
 | Each quarter | Citi follow-up | Fees due but not billed, with Excel export and email draft for gatsbilling@citi.com |
 | Month-end | Month-end report | Accrual, rollforward, Excel package; *Finalize* freezes a copy |
+| After the initial load | Tracker clean-up | Every row where the old tracker disagrees with the invoices; decide Apply / Keep current / Needs more review, then download the corrected tracker workbook to compare with the manual one |
 
 ## Matching colours
 
@@ -71,6 +72,7 @@ core/matcher.py        one-to-one green/yellow/red matching
 core/services.py       every workflow, all writes audited
 core/db.py             Unity Catalog (SQL warehouse) and SQLite backends
 core/reports.py        Excel outputs (summary totals are live formulas)
+core/workbook.py       old tracker vs fee ledger, row by row, and the corrected copy of the tracker workbook
 views/                 one file per page
 sql/schema.sql         reference DDL and grants
 notebooks/pipeline/    release job notebooks (01 pull, 02 test, 03 deploy) and the job definition

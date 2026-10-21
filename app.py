@@ -19,8 +19,8 @@ if ui.load_settings().backend == "databricks" and not ui.sso_email():
     ui.footer()
     st.stop()
 
-# One row of pages in the order and wording of the demo (demo/Citi_Accruals_Demo.html). Setup (initial load and
-# program fees) is not in the demo, so it comes last.
+# One row of pages in the order and wording of the demo (demo/Citi_Accruals_Demo.html). Tracker clean-up (agreed in
+# the 21 October 2026 review) and Setup (initial load and program fees) are not in the demo.
 pages = [
     st.Page("views/overview.py", title="Overview", default=True),
     st.Page("views/upload_invoice.py", title="Upload Citi invoice"),
@@ -29,6 +29,7 @@ pages = [
     st.Page("views/followup.py", title="Citi follow-up"),
     st.Page("views/month_end.py", title="Month-end"),
     st.Page("views/exceptions.py", title="Exceptions"),
+    st.Page("views/cleanup.py", title="Tracker clean-up"),
     st.Page("views/audit.py", title="Audit history"),
     st.Page("views/setup.py", title="Setup"),
 ]
