@@ -114,6 +114,16 @@ class Service:
             self.db.insert("settings", [{"key": "schedule_start", "value": self.settings.schedule_start.isoformat(),
                                          "updated_by": user, "updated_at": now()}])
 
+    def save_setting(self, user: str, key: str, value: str, reason: str, summary: dict | None = None) -> None:
+        """Create or replace a setting. The audit log gets `summary` (or the value) rather than a large payload."""
+        s = self.db.read("settings")
+        if key in set(s["key"]):
+            self.db.update("settings", key, {"value": value, "updated_by": user, "updated_at": now()})
+            self.audit(user, "update", "settings", key, None, None, summary if summary is not None else value, reason)
+        else:
+            self.db.insert("settings", [{"key": key, "value": value, "updated_by": user, "updated_at": now()}])
+            self.audit(user, "create", "settings", key, None, None, summary if summary is not None else value, reason)
+
     def update_program(self, user: str, code: str, changes: dict, reason: str) -> None:
         cur = self._row("programs", code)
         real = self._update(user, "programs", code, changes, cur, reason)
@@ -557,6 +567,11 @@ class Service:
         if trk_f:
             as_of = as_of or _as_of_from_name(trk_f.name) or date.today()
             report["bridge"], report["bridge_summary"] = self._bridge(user, tracker, tracker_summary_total(trk_f.data), as_of)
+            # Kept so the month-end page can always show why the tracker differed from the tool.
+            self.save_setting(user, "opening_bridge",
+                              to_json({"summary": report["bridge_summary"], "rows": report["bridge"].to_dict("records")}),
+                              reason, summary={"items": len(report["bridge"]),
+                                               "tracker_total": report["bridge_summary"]["tracker_total"]})
             self._doc(user, "tracker", trk_f, self.files.save("registers", trk_f.name, trk_f.data))
         report["kinds"] = dict(kinds)
         self.audit(user, "initial_load", "system", "initial_load", None, None,
