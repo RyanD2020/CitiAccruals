@@ -1,0 +1,52 @@
+{
+  "name": "citi-fee-accruals release",
+  "description": "Pull main into the deployment Git folder, run the regression baseline, deploy the citi-fee-accruals app. See DEPLOY.md.",
+  "max_concurrent_runs": 1,
+  "queue": {"enabled": true},
+  "timeout_seconds": 5400,
+  "run_as": {"user_name": "ryan_e_doswell@newyorklife.com"},
+  "email_notifications": {
+    "on_failure": ["ryan_e_doswell@newyorklife.com"],
+    "no_alert_for_skipped_runs": true
+  },
+  "parameters": [
+    {"name": "git_folder_path", "default": "/Workspace/Shared/citi_accruals"},
+    {"name": "branch", "default": "main"},
+    {"name": "tag", "default": ""},
+    {"name": "commit", "default": ""},
+    {"name": "app_name", "default": "citi-fee-accruals"},
+    {"name": "catalog", "default": "<CATALOG>"},
+    {"name": "test_zip", "default": "/Volumes/<CATALOG>/citi_accruals/documents/test_fixtures/Citi_Accruals_Documents.zip"}
+  ],
+  "environments": [
+    {"environment_key": "serverless_env6", "spec": {"environment_version": "6"}}
+  ],
+  "tasks": [
+    {
+      "task_key": "pull",
+      "description": "Update the Git folder to the branch/tag and record the commit",
+      "notebook_task": {"notebook_path": "/Workspace/Shared/citi_accruals/notebooks/pipeline/01_pull", "source": "WORKSPACE"},
+      "environment_key": "serverless_env6",
+      "timeout_seconds": 600,
+      "max_retries": 0
+    },
+    {
+      "task_key": "test",
+      "description": "Regression baseline against the test documents (SQLite backend)",
+      "depends_on": [{"task_key": "pull"}],
+      "notebook_task": {"notebook_path": "/Workspace/Shared/citi_accruals/notebooks/pipeline/02_test", "source": "WORKSPACE"},
+      "environment_key": "serverless_env6",
+      "timeout_seconds": 1800,
+      "max_retries": 0
+    },
+    {
+      "task_key": "deploy",
+      "description": "Deploy the app from the Git folder and wait until it is RUNNING",
+      "depends_on": [{"task_key": "test"}],
+      "notebook_task": {"notebook_path": "/Workspace/Shared/citi_accruals/notebooks/pipeline/03_deploy", "source": "WORKSPACE"},
+      "environment_key": "serverless_env6",
+      "timeout_seconds": 3600,
+      "max_retries": 0
+    }
+  ]
+}

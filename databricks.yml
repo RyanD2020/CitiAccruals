@@ -1,0 +1,116 @@
+# Databricks Asset Bundle for the Citi fee accruals app and its release job.
+#
+# Not used by today's release routine: the app and the job are created once by hand and the job is run
+# from the workspace (see DEPLOY.md). This file declares the same two resources so that an external CI
+# (GitHub Actions / Azure DevOps) can later run `databricks bundle deploy` + `databricks bundle run
+# citi_accruals_release` without restructuring. Before the first bundle deploy, bind the existing app and
+# job to it (DEPLOY.md, "Moving to external CI"), otherwise the bundle creates duplicates.
+
+bundle:
+  name: citi_accruals
+
+variables:
+  catalog:
+    description: Unity Catalog catalog holding the citi_accruals schema (must match ACCRUALS_CATALOG in app.yaml)
+  warehouse_id:
+    description: SQL warehouse attached to the app as the resource named sql-warehouse
+  git_folder_path:
+    description: Deployment Git folder the release job pulls into and deploys from
+    default: /Workspace/Shared/citi_accruals
+  notify_email:
+    description: Address emailed when a release run fails
+    default: ryan_e_doswell@newyorklife.com
+
+sync:
+  exclude:
+    - "*.zip"
+    - "*.pdf"
+    - "*.xls"
+    - "*.xlsx"
+    - "*.xlsm"
+    - "*.db"
+    - "local_files/**"
+    - ".venv/**"
+    - "**/__pycache__/**"
+
+resources:
+  apps:
+    citi_accruals_app:
+      name: citi-fee-accruals
+      description: Citi trustee fee accruals for the NYL MTN programs
+      source_code_path: .
+      resources:
+        - name: sql-warehouse
+          description: SQL warehouse for the accrual tables (app.yaml reads it via valueFrom)
+          sql_warehouse:
+            id: ${var.warehouse_id}
+            permission: CAN_USE
+
+  jobs:
+    citi_accruals_release:
+      name: citi-fee-accruals release
+      description: Pull main into the deployment Git folder, run the regression baseline, deploy the app.
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 5400
+      email_notifications:
+        on_failure:
+          - ${var.notify_email}
+        no_alert_for_skipped_runs: true
+      parameters:
+        - name: git_folder_path
+          default: ${var.git_folder_path}
+        - name: branch
+          default: main
+        - name: tag
+          default: ""
+        - name: commit
+          default: ""
+        - name: app_name
+          default: citi-fee-accruals
+        - name: catalog
+          default: ${var.catalog}
+        - name: test_zip
+          default: /Volumes/${var.catalog}/citi_accruals/documents/test_fixtures/Citi_Accruals_Documents.zip
+      environments:
+        - environment_key: serverless_env6
+          spec:
+            environment_version: "6"
+      tasks:
+        - task_key: pull
+          notebook_task:
+            notebook_path: ${var.git_folder_path}/notebooks/pipeline/01_pull
+            source: WORKSPACE
+          environment_key: serverless_env6
+          timeout_seconds: 600
+        - task_key: test
+          depends_on:
+            - task_key: pull
+          notebook_task:
+            notebook_path: ${var.git_folder_path}/notebooks/pipeline/02_test
+            source: WORKSPACE
+          environment_key: serverless_env6
+          timeout_seconds: 1800
+        - task_key: deploy
+          depends_on:
+            - task_key: test
+          notebook_task:
+            notebook_path: ${var.git_folder_path}/notebooks/pipeline/03_deploy
+            source: WORKSPACE
+          environment_key: serverless_env6
+          timeout_seconds: 3600
+
+targets:
+  prod:
+    mode: production
+    default: true
+    workspace:
+      host: <WORKSPACE_URL>
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+    run_as:
+      # Switch to service_principal_name: <application-id> when the job moves to a service principal.
+      user_name: ryan_e_doswell@newyorklife.com
+    variables:
+      catalog: <CATALOG>
+      warehouse_id: <WAREHOUSE_ID>
