@@ -108,6 +108,23 @@ def _run(zip_path: str, tmp: str, log) -> dict:
         "rollforward_check_2026_09": roll["check"],
     }
 
+    # Corrected tracker workbook: with every change applied it must equal the tool's accrual, and a "keep current"
+    # decision must move the total by exactly that row's effect.
+    from core import workbook
+    _, trk = svc.tracker_document()
+    found = workbook.findings(trk, data, AS_OF)
+    _, tot = workbook.corrected_workbook(trk, data, AS_OF, {})
+    assert tot["corrected_total"] == tot["ledger_total"], tot
+    big = max(found, key=lambda f: abs(f.effect))
+    svc.decide_tracker_rows("tester", {big.id: ("keep", "test")}, "test")
+    _, tot_keep = workbook.corrected_workbook(trk, svc.load(), AS_OF, svc.tracker_decisions())
+    assert abs(tot_keep["corrected_total"] - (tot["corrected_total"] - big.effect)) < 0.005, (tot_keep, big.effect)
+    assert len(svc.db.read("audit_log").query("action == 'decide'")) == 1
+    svc.decide_tracker_rows("tester", {big.id: (None, None)}, "test")
+    metrics.update(tracker_rows_total=workbook.tracker_total(trk), tracker_findings=len(found),
+                   corrected_workbook_total=tot["corrected_total"])
+    log("Tracker clean-up:", len(found), "rows differ; corrected workbook total", tot["corrected_total"])
+
     # Duplicate upload must be blocked
     inv_bytes = dict(files)["178352.pdf"]
     res = svc.preview_invoice(inv_bytes)

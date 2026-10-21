@@ -1,6 +1,7 @@
 """Workflows. Every change goes through here so it is written to the audit log with the user's name."""
 from __future__ import annotations
 
+import json
 import re
 import uuid
 from collections import Counter
@@ -16,6 +17,7 @@ from .matcher import GREEN, MANUAL, PRIOR, RED, YELLOW, LineMatch, MatchResult, 
 from .parsers import (ClassifiedFile, ParsedInvoice, classify_file, file_hash, parse_fa_register,
                       parse_invoice, parse_tracker, tracker_summary_total)
 from .storage import FileStore
+from .workbook import DECISIONS
 
 
 def now() -> datetime:
@@ -388,6 +390,44 @@ class Service:
         for fa, ch in by_fa.items():
             warnings += self.update_contract(user, fa, ch, reason)
         return warnings
+
+    # ------------------------------------------------------------------ tracker clean-up
+    def tracker_document(self) -> tuple[str, bytes] | None:
+        """The old tracker workbook saved at the initial load (file name, bytes), or None."""
+        docs = self.db.read("documents")
+        t = docs[docs["doc_type"] == "tracker"].sort_values("uploaded_at")
+        if t.empty:
+            return None
+        r = t.iloc[-1]
+        raw = self.files.load(r["file_path"])
+        return (r["file_name"], raw) if raw else None
+
+    def tracker_decisions(self, data: dict | None = None) -> dict[str, dict]:
+        """Decision per tracker row ("<FA>:<year>"): {"decision", "note", "by", "at"}."""
+        s = (data or {}).get("settings")
+        s = self.db.read("settings") if s is None else s
+        row = s.loc[s["key"] == "tracker_decisions", "value"]
+        return json.loads(row.iloc[0]) if len(row) and row.iloc[0] else {}
+
+    def decide_tracker_rows(self, user: str, changes: dict[str, tuple[str | None, str | None]], reason: str) -> int:
+        """Record apply / keep / review (or None to clear) for tracker rows; each change is audited."""
+        cur = self.tracker_decisions()
+        n = 0
+        for fid, (decision, note) in changes.items():
+            if decision is not None and decision not in DECISIONS:
+                raise ValueError(f"Unknown decision {decision!r}")
+            old = cur.get(fid, {})
+            if old.get("decision") == decision and (old.get("note") or None) == (note or None):
+                continue
+            if decision is None:
+                cur.pop(fid, None)
+            else:
+                cur[fid] = {"decision": decision, "note": note or None, "by": user, "at": now().isoformat()}
+            self.audit(user, "decide", "tracker_row", fid, "decision", old.get("decision"), decision, note or reason)
+            n += 1
+        if n:
+            self.save_setting(user, "tracker_decisions", to_json(cur), reason, summary={"rows_decided": len(cur)})
+        return n
 
     # ------------------------------------------------------------------ month-end
     def create_snapshot(self, user: str, as_of: date, report_bytes: bytes | None, summary: dict) -> str:
