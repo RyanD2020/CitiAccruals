@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+citi_accruals.db
+local_files/
+.databricks/
+# Source documents (invoices, registers, tracker, term sheets) must never be committed
+*.zip
+*.pdf
+*.xls
+*.xlsx
+*.xlsm

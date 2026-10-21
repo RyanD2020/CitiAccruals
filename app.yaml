@@ -1,0 +1,19 @@
+# Databricks Apps configuration
+command: ["streamlit", "run", "app.py"]
+
+env:
+  # SQL warehouse attached to the app as a resource named "sql-warehouse"
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  # Unity Catalog location for the tables and the documents volume -- change to your catalog/schema
+  - name: ACCRUALS_CATALOG
+    value: "your_catalog"
+  - name: ACCRUALS_SCHEMA
+    value: "citi_accruals"
+  - name: ACCRUALS_VOLUME
+    value: "documents"
+  # First anniversary date tracked (matches the 2024 tab of the old workbook)
+  - name: ACCRUALS_SCHEDULE_START
+    value: "2024-01-01"
+  - name: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+    value: "false"
