@@ -6,6 +6,7 @@ from datetime import date
 
 import pandas as pd
 from openpyxl import Workbook
+from openpyxl.formatting.rule import CellIsRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
@@ -13,8 +14,12 @@ from . import engine
 from .config import CITI_BILLING_EMAIL
 
 DARK_BLUE, BLUE, GREY_RULE = "000A62", "0468FF", "E3E0DD"
+GREEN, LIGHT_GREEN = "016355", "A5EFBF"
 HEAD_FONT = Font(name="Arial", bold=True, color="FFFFFF")
-HEAD_FILL = PatternFill("solid", fgColor=BLUE)
+HEAD_FILL = PatternFill("solid", fgColor=DARK_BLUE)
+# Pass and Paid cells: Green on Light Green (design/BRAND.md)
+PASS_FONT = Font(name="Arial", size=10, bold=True, color=GREEN)
+PASS_FILL = PatternFill("solid", fgColor=LIGHT_GREEN)
 TITLE_FONT = Font(name="Georgia", size=16, color=DARK_BLUE)
 SUB_FONT = Font(name="Arial", size=10, color="000000")
 BODY_FONT = Font(name="Arial", size=10)
@@ -40,6 +45,8 @@ def _table(ws, df: pd.DataFrame, start_row: int, money_cols=(), date_cols=(), wi
                 v = v.item()
             c = ws.cell(row=i, column=j, value=v)
             c.font, c.border = BODY_FONT, RULE
+            if v in (engine.STATUS_PAID, "Pass"):
+                c.font, c.fill = PASS_FONT, PASS_FILL
             name = df.columns[j - 1]
             if name in money_cols:
                 c.number_format = MONEY
@@ -132,6 +139,7 @@ def accrual_workbook(as_of: date, lg: engine.Ledger, roll: dict, invoices: pd.Da
     ws.cell(row=r, column=1, value="Check against outstanding detail (should be 0)").font = SUB_FONT
     c = ws.cell(row=r, column=2, value=f"=B{r - 1}-B4")
     c.number_format = MONEY
+    ws.conditional_formatting.add(f"B{r}", CellIsRule(operator="equal", formula=["0"], font=PASS_FONT, fill=PASS_FILL))
     r += 2
     ws.cell(row=r, column=1, value="Rollforward inputs (blue) come from the tool's fee ledger; totals are formulas.").font = SUB_FONT
     ws.column_dimensions["A"].width = 46
