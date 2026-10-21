@@ -79,14 +79,15 @@ for up in files:
         exp = ev_idx.loc[lm.event_id] if lm.event_id in ev_idx.index else None
         rows.append({
             "Line": lm.line_no, "Result": ui.RESULT_LABEL[lm.status], "Citi series": lm.series,
-            "Citi fee date": lm.action_date, "Billed": lm.amount, "Matched FA": lm.fa_number,
+            "Citi maturity": lm.maturity_date, "Citi fee date": lm.action_date, "Billed": lm.amount,
+            "Matched FA": lm.fa_number,
             "Our series": contracts.loc[lm.fa_number, "series"] if lm.fa_number in contracts.index else None,
             "Anniversary": exp["event_date"] if exp is not None else None,
             "Expected": lm.expected_amount, "Notes": " ".join(lm.notes),
         })
     table = pd.DataFrame(rows)
     st.dataframe(ui.style_col(table, "Result", ui.RESULT_STYLE, money_cols=("Billed", "Expected"),
-                              date_cols=("Citi fee date", "Anniversary")),
+                              date_cols=("Citi maturity", "Citi fee date", "Anniversary")),
                  hide_index=True, width="stretch",
                  column_config={"Matched FA": st.column_config.NumberColumn(format="%d"),
                                 "Notes": st.column_config.TextColumn(width="large")})
@@ -130,10 +131,13 @@ for up in files:
     with st.form(f"post_{key}"):
         st.markdown("**Approval and payment**")
         c1, c2, c3, c4 = st.columns(4)
-        appr = c1.date_input("Approved for payment", value=inv.approval_date, format="DD/MM/YYYY")
+        appr = c1.date_input("Approved for payment", value=inv.approval_date, format="DD/MM/YYYY",
+                             help="The date the invoice was approved for payment (the 'okay to pay' date), "
+                                  "not the invoice date.")
         c2.text_input("Approved by", value=ui.user(), disabled=True,
                       help="Recorded from your company sign-in.")
-        paid = c3.date_input("Payment date", value=None, format="DD/MM/YYYY")
+        paid = c3.date_input("Payment date", value=None, format="DD/MM/YYYY",
+                             help="The date the payment went out. The fees leave the accrual on this date.")
         ref = c4.text_input("Payment reference", placeholder="optional")
         st.caption('The approval date is pre-filled from the "okay to pay" stamp when the PDF has one. Leave the '
                    "payment date blank until the money goes out.")
