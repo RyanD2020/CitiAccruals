@@ -89,3 +89,32 @@ Status chips are the only other coloured backgrounds:
 
 - Status chips keep their light colours in dark mode.
 - The header and footer follow the theme. The supplied logo reads on both white and Dark Blue.
+
+## Streamlit
+
+The app follows these rules through Streamlit's own theme where it can. That's `.streamlit/config.toml`, checked
+against Streamlit 1.66.0, which `requirements.txt` pins. The theme sets:
+
+- Georgia headings and Arial body text
+- square corners on buttons and inputs
+- Dark Blue dataframe headers with white text
+- link colours
+- chart bar colours (Dark Blue in light mode, `#80BAFF` in dark)
+- the chip colours behind success, error, warning and info messages
+- separate light and dark themes, which users switch from the settings menu
+
+`views/ui.py` injects `nyl.css` once per run and renders the hero, chevrons, KPI cards, small tables, chips and
+footer as HTML. The CSS colour tokens follow the Streamlit theme the user picked, not the operating system's.
+
+Where the app can't match the design:
+
+- **Dark-mode buttons.** Streamlit always draws primary-button text in white, so dark mode uses Blue `#0468FF`
+  buttons with white text instead of white buttons with Dark Blue text.
+- **Top navigation.** Streamlit styles the selected page itself. It isn't the square Dark Blue block the demo uses.
+- **Theme switching.** The app reads the selected theme from `st.context.theme`. Streamlit notes this can be wrong on
+  a session's first load and right after the user switches theme, so the branded blocks can show the old theme
+  until the next interaction.
+- **Chips in large tables.** Inside `st.dataframe`, chips are cell colours only: no 2px corners, and "plain" chips
+  are plain text.
+- **Heading colour.** The theme has no option for it. A two-line rule at the end of `nyl.css` sets it using
+  Streamlit's `stHeading` test id, which is one reason the Streamlit version is pinned.

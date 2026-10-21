@@ -258,9 +258,9 @@
 /* ------------------------------------------------------------------ hero with the signature diagonal */
 .nyl-hero {
   position: relative;
+  container: nyl-hero / inline-size;   /* the stacked layout follows the hero's own width, not the window */
   background: var(--hero-side);
   color: var(--hero-side-text);
-  min-height: 300px;
   overflow: hidden;
 }
 .nyl-hero__field {
@@ -285,8 +285,7 @@
   color: var(--hero-side-text);
 }
 .nyl-hero__side h2, .nyl-hero__side h3 { color: var(--hero-side-heading); }
-@media (max-width: 960px) {
-  .nyl-hero { background: var(--hero-side); min-height: 0; }
+@container nyl-hero (max-width: 960px) {
   .nyl-hero__field { display: none; }
   .nyl-hero__inner { display: block; min-height: 0; }
   .nyl-hero__main {
@@ -400,11 +399,8 @@
 }
 
 /* ------------------------------------------------------------------ Streamlit adapter
-   Only applies inside the Streamlit app (data-testid selectors do not exist in the demo). Used for what
-   the Streamlit theme options cannot express; see design/BRAND.md "Streamlit". */
-[data-testid="stAppViewContainer"] h1, [data-testid="stAppViewContainer"] h2,
-[data-testid="stAppViewContainer"] h3, [data-testid="stAppViewContainer"] h4,
-[data-testid="stHeading"] * {
-  font-family: var(--font-head) !important; font-weight: 400 !important; color: var(--heading);
-}
+   Only applies inside the Streamlit app (data-testid selectors do not exist in the demo). Covers what the theme in
+   .streamlit/config.toml cannot express; see design/BRAND.md, "Streamlit". */
+[data-testid="stHeading"] h1, [data-testid="stHeading"] h2, [data-testid="stHeading"] h3,
+[data-testid="stHeading"] h4 { color: var(--heading); }
 [data-testid="stMetricValue"] { font-family: var(--font-head); color: var(--metric); }
