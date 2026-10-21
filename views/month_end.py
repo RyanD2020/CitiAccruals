@@ -50,7 +50,7 @@ st.dataframe(ui.style_col(det, "Status", ui.STATUS_STYLE, money_cols=("Amount",)
              hide_index=True, width="stretch", height=380,
              column_config={"FA #": st.column_config.NumberColumn(format="%d")})
 
-xlsx = reports.accrual_workbook(as_of, lg, roll, d["invoices"], d["data_issues"], ui.user_display())
+xlsx = reports.accrual_workbook(as_of, lg, roll, d["invoices"], d["data_issues"], ui.user())
 snaps = d["snapshots"]
 existing = snaps[snaps["as_of"] == as_of]
 a, b = st.columns(2)

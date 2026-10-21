@@ -12,6 +12,13 @@ from views import ui  # noqa: E402  (after set_page_config)
 st.html(ui.css())  # design/nyl.css, once per run; style-only HTML takes no space on the page
 st.logo(os.path.join(HERE, "assets", "nyl_logo.png"), size="large")
 
+# Every change is recorded against the signed-in user, so on Databricks the app only runs behind the company SSO.
+if ui.load_settings().backend == "databricks" and not ui.sso_email():
+    st.error("Your sign-in was not passed to the app, so changes can't be recorded against you. Open the app "
+             "from Databricks, where you sign in with your company SSO, and try again.")
+    ui.footer()
+    st.stop()
+
 pages = {
     "Accrual": [
         st.Page("views/overview.py", title="Overview", default=True),

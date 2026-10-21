@@ -69,7 +69,7 @@ if len(unpaid):
                         row = inv[inv["invoice_no"] == no].iloc[0]
                         ch = {"payment_date": pdate, "payment_ref": pref or row["payment_ref"]}
                         if row["approval_date"] is None:
-                            ch.update({"approval_date": pdate, "approved_by": ui.user_display()})
+                            ch.update({"approval_date": pdate, "approved_by": ui.user()})
                         svc.update_invoice(ui.user(), no, ch, reason)
                     ui.refresh()
                     st.success(f"Payment recorded on {len(pick)} invoice(s).")
@@ -87,9 +87,8 @@ c1, c2 = st.columns([1, 1])
 with c1:
     with st.form(f"dates_{choice}"):
         st.markdown("**Approval and payment**")
-        a1, a2 = st.columns(2)
-        appr = a1.date_input("Approved for payment", value=row["approval_date"], format="DD/MM/YYYY")
-        appr_by = a2.text_input("Approved by", value=row["approved_by"] or "")
+        appr = st.date_input("Approved for payment", value=row["approval_date"], format="DD/MM/YYYY")
+        st.caption(f"Approved by {row['approved_by']}." if row["approved_by"] else "Not approved yet.")
         b1, b2 = st.columns(2)
         paid = b1.date_input("Payment date", value=row["payment_date"], format="DD/MM/YYYY")
         ref = b2.text_input("Payment reference", value=row["payment_ref"] or "")
@@ -101,8 +100,11 @@ with c1:
             elif paid is not None and appr is None:
                 st.error("Add the approval date before recording a payment.")
             else:
+                # The approver is whoever records the approval (their SSO sign-in); unchanged if the date is.
+                appr_by = (None if appr is None else row["approved_by"] if appr == row["approval_date"]
+                           else ui.user())
                 changed = svc.update_invoice(ui.user(), choice, {
-                    "approval_date": appr, "approved_by": appr_by or None, "payment_date": paid,
+                    "approval_date": appr, "approved_by": appr_by, "payment_date": paid,
                     "payment_ref": ref or None, "notes": notes or None}, reason)
                 ui.refresh()
                 st.success(f"Saved {len(changed)} change(s)." if changed else "Nothing changed.")

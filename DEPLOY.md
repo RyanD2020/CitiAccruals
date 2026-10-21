@@ -68,6 +68,15 @@ exclude every zip, PDF and Excel file.
    deploys from that folder.
 6. Give business users **Can use** on the app (app > Permissions). Give **Can manage** to anyone who
    should be able to start the app when it has stopped.
+   - Grant these to a group synced from your company directory rather than to individuals, so joiners and
+     leavers are handled by SSO.
+7. **Sign-in.** Users reach the app through the Databricks workspace, so they sign in with the company SSO
+   that the workspace is set up with (a workspace admin's setting).
+   - Databricks Apps passes each user's email to the app, and the app records it in the audit log for every
+     change. It also records it as the approver when someone enters an approval date. The name on a PDF's
+     "okay to pay" stamp is never stored; only the stamp's date is used, to pre-fill the approval date.
+   - If no signed-in user reaches the app, it shows a sign-in message and won't open, so a change can never be
+     recorded without a person behind it.
 
 ### 6. Grant the app's service principal access to its data
 

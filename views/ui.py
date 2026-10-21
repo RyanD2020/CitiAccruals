@@ -122,14 +122,25 @@ def refresh() -> None:
     _load.clear()
 
 
-def user() -> str:
+def sso_email() -> str | None:
+    """The signed-in user's email. Databricks Apps signs users in through the workspace (company SSO) and
+    forwards their identity in these headers; None when the app is not behind that sign-in."""
     try:
         h = st.context.headers
-        for k in ("X-Forwarded-Email", "X-Forwarded-Preferred-Username", "X-Forwarded-User"):
+        for k in ("X-Forwarded-Email", "X-Forwarded-Preferred-Username"):
             if h.get(k):
                 return h.get(k)
     except Exception:
         pass
+    return None
+
+
+def user() -> str:
+    """Who is making a change: the SSO email on Databricks (app.py refuses to run without it), a local label
+    when developing with SQLite."""
+    email = sso_email()
+    if email:
+        return email
     import getpass
     return f"{getpass.getuser()} (local)"
 

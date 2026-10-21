@@ -519,7 +519,8 @@ class Service:
                     if tdate else "Loaded at initial setup. Payment date assumed from the 'okay to pay' stamp"
                     if inv.approval_date else "Loaded at initial setup. No approval or payment date available")
             counts = self.post_invoice(user, result, file_name=f.name, file_bytes=f.data, approval_date=approval,
-                                       approved_by=inv.approved_by, payment_date=payment, notes=note, reason=reason)
+                                       approved_by=user if approval else None, payment_date=payment, notes=note,
+                                       reason=reason)
             posted.append({"invoice": inv.invoice_no, "program": inv.program_code, "date": inv.invoice_date,
                            "total": inv.fee_total, "lines": len(inv.lines), **counts})
 
@@ -596,7 +597,8 @@ class Service:
             if lm.status == GREEN:
                 lm.status = YELLOW
             lm.notes.append("No PDF on file; line reconstructed from the tracker.")
-        counts = self.post_invoice(user, result, approval_date=tdate, payment_date=tdate, source="tracker",
+        counts = self.post_invoice(user, result, approval_date=tdate, approved_by=user if tdate else None,
+                                   payment_date=tdate, source="tracker",
                                    notes="No PDF in the folder. Reconstructed from tracker rows.", reason=reason)
         self.add_issue(user, "Missing source document", "invoices", inv_no,
                        f"Invoice {inv_no} is referenced by the tracker but its PDF was not in the folder. "

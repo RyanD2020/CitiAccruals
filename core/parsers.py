@@ -58,7 +58,6 @@ class ParsedInvoice:
     fee_total: float | None
     currency: str
     lines: list[InvoiceLine] = field(default_factory=list)
-    approved_by: str | None = None
     approval_date: date | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -115,11 +114,12 @@ def parse_invoice_text(text: str) -> ParsedInvoice:
             amount=_money(m.group("amt")),
             currency=m.group("ccy"),
         ))
-    # Approval stamp added by the business, e.g. "okay to pay / <approver name> - 1/20/2026"
-    approved_by = approval_date = None
+    # Approval stamp added by the business, e.g. "okay to pay / <approver name> - 1/20/2026". Only the date is
+    # kept: the approver recorded in the app is the signed-in (SSO) user who posts the approval.
+    approval_date = None
     stamp = re.search(r"(?i)ok(?:ay)?\s+to\s+pay\s*\n?\s*([A-Za-z][A-Za-z .'-]+?)\s*-\s*(\d{1,2}/\d{1,2}/\d{4})", text)
     if stamp:
-        approved_by, approval_date = stamp.group(1).strip(), parse_date(stamp.group(2))
+        approval_date = parse_date(stamp.group(2))
 
     if not lines:
         warnings.append("No fee lines were found on the invoice.")
@@ -138,7 +138,6 @@ def parse_invoice_text(text: str) -> ParsedInvoice:
         fee_total=_money(total.group(1)) if total else None,
         currency=(total.group(2) if total and total.group(2) else "USD"),
         lines=lines,
-        approved_by=approved_by,
         approval_date=approval_date,
         warnings=warnings,
     )

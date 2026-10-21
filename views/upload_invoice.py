@@ -120,13 +120,13 @@ for up in files:
 
     with st.form(f"post_{key}"):
         st.markdown("**Approval and payment**")
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3 = st.columns(3)
         appr = c1.date_input("Approved for payment", value=inv.approval_date, format="DD/MM/YYYY",
                              help="Pre-filled from the 'okay to pay' stamp when the PDF has one.")
-        appr_by = c2.text_input("Approved by", value=inv.approved_by or ui.user_display())
-        paid = c3.date_input("Payment date", value=None, format="DD/MM/YYYY",
+        paid = c2.date_input("Payment date", value=None, format="DD/MM/YYYY",
                              help="Leave blank until the payment goes out. You can add it later on Invoices & payments.")
-        ref = c4.text_input("Payment reference", placeholder="optional")
+        ref = c3.text_input("Payment reference", placeholder="optional")
+        st.caption(f"The approval is recorded as yours ({ui.user()}), from your company sign-in.")
         notes = st.text_input("Notes", placeholder="optional")
         go = st.form_submit_button(f"Post invoice {inv.invoice_no}", type="primary")
     if go:
@@ -136,7 +136,7 @@ for up in files:
             try:
                 counts = svc.post_invoice(ui.user(), result, file_name=up.name, file_bytes=raw,
                                           overrides=overrides, approval_date=appr,
-                                          approved_by=appr_by if appr else None, payment_date=paid,
+                                          approved_by=ui.user() if appr else None, payment_date=paid,
                                           payment_ref=ref or None, notes=notes or None)
                 ui.refresh()
                 cache.pop(key, None)
