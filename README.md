@@ -6,19 +6,12 @@ fee, tracks approval and payment, and produces the month-end accrual with a full
 
 ## Deploy
 
-1. **Create the schema and volume** (or let the app try on first start). Run `sql/schema.sql` in a SQL
-   editor after replacing `your_catalog`. It also contains the grants the app's service principal needs:
-   `USE CATALOG`, `USE SCHEMA`, `CREATE TABLE`, `SELECT`, `MODIFY` on the schema, and `READ/WRITE VOLUME`.
-2. **Create the app.** In the workspace go to Compute > Apps > Create app > Custom, and upload this
-   folder (or sync it from a Git folder).
-3. **Add a resource.** On the app, add a SQL warehouse resource with key `sql-warehouse` and
-   permission *Can use*. A small serverless warehouse is enough.
-4. **Edit `app.yaml`.** Set `ACCRUALS_CATALOG` (and `ACCRUALS_SCHEMA` / `ACCRUALS_VOLUME` if different).
-5. **Deploy**, then give the business users *Can use* on the app (and *Can manage* to anyone who should
-   be able to start it when it has stopped).
-6. **Load the folder.** Open Setup, upload the Citi accruals zip (FA register, tracker workbook and all
-   invoice PDFs), and click *Load everything*. Review the opening-balance bridge and resolve the items
-   on the Exceptions page once the business has signed off.
+See [DEPLOY.md](DEPLOY.md). Releases run as a Databricks job (pull from Git, regression test, deploy) from
+a Git folder; DEPLOY.md covers the one-time setup, the release routine and rollback.
+
+After the first deploy, **load the folder**: open Setup, upload the Citi accruals zip (FA register, tracker
+workbook and all invoice PDFs), and click *Load everything*. Review the opening-balance bridge and resolve
+the items on the Exceptions page once the business has signed off.
 
 `requirements.txt` installs from PyPI at deploy time. If your workspace blocks PyPI, ask the platform
 team for the internal mirror.
@@ -80,4 +73,7 @@ core/db.py             Unity Catalog (SQL warehouse) and SQLite backends
 core/reports.py        Excel outputs (summary totals are live formulas)
 views/                 one file per page
 sql/schema.sql         reference DDL and grants
+notebooks/pipeline/    release job notebooks (01 pull, 02 test, 03 deploy) and the job definition
+databricks.yml         bundle declaring the app and the release job (for a later move to external CI)
+DEPLOY.md              setup, release, rollback
 ```
