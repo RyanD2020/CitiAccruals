@@ -109,7 +109,7 @@
   --hero-field: #0A1570;
   --hero-field-text: #FFFFFF;
   --hero-field-eyebrow: #80BAFF;
-  --hero-side: #111D7C;
+  --hero-side: #1A2690;
   --hero-side-text: #FFFFFF;
   --hero-side-heading: #FFFFFF;
   --hero-side-rule: #2A3590;
@@ -148,7 +148,7 @@
     --hero-field: #0A1570;
     --hero-field-text: #FFFFFF;
     --hero-field-eyebrow: #80BAFF;
-    --hero-side: #111D7C;
+    --hero-side: #1A2690;
     --hero-side-text: #FFFFFF;
     --hero-side-heading: #FFFFFF;
     --hero-side-rule: #2A3590;
@@ -211,6 +211,10 @@
 .nyl-tab:hover { text-decoration: underline; }
 .nyl-tab[aria-selected="true"] { background: var(--btn-bg); color: var(--btn-text); text-decoration: none; }
 .nyl-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 1280px) {
+  .nyl-header { flex-wrap: wrap; row-gap: 0.4rem; }
+  .nyl-tabs { margin-left: 0; width: 100%; overflow-x: auto; }
+}
 
 .nyl-footer {
   display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
@@ -369,7 +373,8 @@
   font-weight: 700; text-align: left;
   padding: 0.55rem 0.7rem; white-space: nowrap;
 }
-.nyl-table td { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--table-rule); vertical-align: top; }
+.nyl-table td { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--table-rule); vertical-align: top; white-space: nowrap; }
+.nyl-table td.wrap { white-space: normal; }
 .nyl-table th.num, .nyl-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .nyl-table tr.is-clickable { cursor: pointer; }
 .nyl-table tr.is-clickable:hover td { background: var(--table-hover); }

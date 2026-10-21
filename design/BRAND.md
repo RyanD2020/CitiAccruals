@@ -40,6 +40,8 @@ Status chips are the only other coloured backgrounds:
 - The hero is a Dark Blue field cut by a steep diagonal of about 67 degrees, over a Grey right side. In
   CSS it's `clip-path: polygon(0 0, 60% 0, 51% 100%, 0 100%)`.
 - Hero text sits only on the Dark Blue field, and right-side content sits only on the Grey.
+- On the Dark Blue field the eyebrow is `#80BAFF`, not Blue, because Blue on Dark Blue is too low in contrast
+  to read.
 - Under 960px wide, drop the diagonal. The hero text gets its own Dark Blue block with a slanted bottom
   edge, and the right-side content goes on Grey below it.
 - Text must never sit across the diagonal or on the wrong background.
@@ -83,6 +85,7 @@ Status chips are the only other coloured backgrounds:
 | Buttons | white with Dark Blue text |
 | Chart bars | `#80BAFF` |
 | First process step | `#1A2690`, so it stays visible against the page |
+| Hero | field `#0A1570`, right side `#1A2690`, so the diagonal stays visible |
 
 - Status chips keep their light colours in dark mode.
 - The header and footer follow the theme. The supplied logo reads on both white and Dark Blue.

@@ -10,3 +10,5 @@ local_files/
 *.xls
 *.xlsx
 *.xlsm
+# Demo output contains real figures
+demo/out/
