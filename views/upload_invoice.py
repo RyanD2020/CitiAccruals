@@ -1,3 +1,4 @@
+"""Upload Citi invoice: laid out as the demo's Upload tab (demo/Citi_Accruals_Demo.html)."""
 import hashlib
 
 import pandas as pd
@@ -7,14 +8,15 @@ from core.matcher import GREEN, MANUAL, PRIOR, RED, YELLOW
 from core.parsers import parse_invoice
 from views import ui
 
-ui.header("Upload Citi invoice",
-          "Drop in the PDF. Every fee line is matched one-to-one to a funding agreement and its anniversary: "
-          "green is an exact match, yellow posts but is worth a glance, red needs your decision.", eyebrow="Accrual")
+ui.header("Every line matched one to one",
+          "Green is an exact match. Yellow posts but is worth a glance, usually a weekend maturity Citi moved to "
+          "Monday. Red means the numbers don't match or there is no clean match, and needs a decision.",
+          eyebrow="Upload Citi invoice")
 if not ui.require_data():
     st.stop()
 
 svc = ui.service()
-files = st.file_uploader("Citi invoice PDFs", type=["pdf"], accept_multiple_files=True,
+files = st.file_uploader("Drop a Citi invoice PDF here", type=["pdf"], accept_multiple_files=True,
                          help="You can drop several invoices at once; each is reviewed and posted separately.")
 if not files:
     st.stop()
@@ -34,8 +36,8 @@ def preview(raw: bytes):
     return key, cache[key]
 
 
-CHECK_RESULT = {GREEN: "Pass", YELLOW: "Review", RED: "Fail"}
-CHECK_KIND = {"Pass": "pass", "Review": "review", "Fail": "fail"}
+# Invoice-level checks: green Pass, yellow Note, red Fail (as in the demo)
+CHECK_CHIP = {GREEN: ("Pass", "pass"), YELLOW: ("Note", "review"), RED: ("Fail", "fail")}
 
 for up in files:
     raw = up.getvalue()
@@ -46,18 +48,18 @@ for up in files:
         continue
     inv = result.invoice
     st.subheader(f"Invoice {inv.invoice_no}")
-    meta = [f"{inv.program_code}"]
+    meta = []
     if inv.invoice_date:
-        meta.append(f"dated {inv.invoice_date:%d %B %Y}")
+        meta.append(f"Dated {ui.fmt_date(inv.invoice_date)}")
     if inv.arrears_start:
-        meta.append(f"fees due {inv.arrears_start:%d %b %Y} to {inv.arrears_end:%d %b %Y}")
-    st.write(", ".join(meta) + f". Total {ui.money(inv.fee_total)}.")
+        meta.append(f"fees due {ui.fmt_date(inv.arrears_start)} to {ui.fmt_date(inv.arrears_end)}")
+    st.write(", ".join(meta) + ("." if meta else "") + f" Total {ui.money(inv.fee_total)}.")
 
-    checks = pd.DataFrame([{"Check": c.name, "Result": CHECK_RESULT.get(c.status, "Review"), "Detail": c.detail}
-                           for c in result.checks])
-    ui.html_table(checks, chips={"Result": CHECK_KIND})
+    st.html('<div class="nyl-checkcards">' + "".join(
+        f'<div class="nyl-checkcard">{ui.chip(*CHECK_CHIP.get(c.status, ("Note", "review")))}'
+        f"<span><strong>{ui.esc(c.name)}.</strong> {ui.esc(c.detail)}</span></div>" for c in result.checks) + "</div>")
     if result.blocking:
-        st.error(result.blocking[0].detail + " Open it on the Invoices page to review or reverse it.")
+        st.error(result.blocking[0].detail + " Open it on Invoices & payments to review or reverse it.")
         st.page_link("views/invoices.py", label="Go to Invoices & payments")
         continue
 
@@ -77,57 +79,64 @@ for up in files:
         exp = ev_idx.loc[lm.event_id] if lm.event_id in ev_idx.index else None
         rows.append({
             "Line": lm.line_no, "Result": ui.RESULT_LABEL[lm.status], "Citi series": lm.series,
-            "Citi maturity": lm.maturity_date, "Citi fee date": lm.action_date, "Billed": lm.amount,
-            "Matched FA": lm.fa_number, "Our series": contracts.loc[lm.fa_number, "series"] if lm.fa_number in contracts.index else None,
+            "Citi fee date": lm.action_date, "Billed": lm.amount, "Matched FA": lm.fa_number,
+            "Our series": contracts.loc[lm.fa_number, "series"] if lm.fa_number in contracts.index else None,
             "Anniversary": exp["event_date"] if exp is not None else None,
-            "Expected": lm.expected_amount, "Notes": "; ".join(lm.notes),
+            "Expected": lm.expected_amount, "Notes": " ".join(lm.notes),
         })
     table = pd.DataFrame(rows)
     st.dataframe(ui.style_col(table, "Result", ui.RESULT_STYLE, money_cols=("Billed", "Expected"),
-                              date_cols=("Citi maturity", "Citi fee date", "Anniversary")),
+                              date_cols=("Citi fee date", "Anniversary")),
                  hide_index=True, width="stretch",
                  column_config={"Matched FA": st.column_config.NumberColumn(format="%d"),
                                 "Notes": st.column_config.TextColumn(width="large")})
 
-    if len(result.not_billed):
-        with st.expander(f"{len(result.not_billed)} fees due in this period that Citi did not bill "
-                         f"({ui.money(result.not_billed['expected_amount'].sum())})"):
-            nb = result.not_billed.rename(columns={"fa_number": "FA #", "series": "Series", "event_date": "Due",
-                                                   "expected_amount": "Fee"})
-            st.dataframe(ui.style_col(nb, "", {}, money_cols=("Fee",), date_cols=("Due",)), hide_index=True,
-                         width="stretch")
-            st.caption("These stay in the accrual and appear on the Citi follow-up list.")
+    nb = result.not_billed
+    if len(nb):
+        ui.notice(f"<strong>{len(nb)} fees due in this period are not on the invoice "
+                  f"({ui.money(nb['expected_amount'].sum())}).</strong> They stay in the accrual and go on the Citi "
+                  "follow-up list: " + "; ".join(
+                      f"{ui.esc(r.series)} (FA {int(r.fa_number)}, due {ui.fmt_date(r.event_date)})"
+                      for r in nb.itertuples()) + ".")
 
     overrides = {}
     reds = [lm for lm in result.lines if lm.status == RED]
     if reds:
-        st.markdown("**Decide the red lines.** Pick the fee each line pays, or leave it unmatched. Unmatched lines "
-                    "are kept on the invoice, do not reduce the accrual, and go to Exceptions.")
+        ui.section(None, "Decide the red lines",
+                   "Pick the fee each line pays, or leave it unmatched. Unmatched lines stay on the invoice, "
+                   "don't reduce the accrual, and go to Exceptions.")
         open_ev = events[events["invoice_no"].isna() & ~events["written_off"]]
         for lm in reds:
             same = open_ev[open_ev["fa_number"].isin(
                 d["contracts"].loc[d["contracts"]["base_series"] == lm.series, "fa_number"])]
-            opts = [None] + list(dict.fromkeys(lm.candidates + list(same["event_id"])))
+            opts = [None] + list(dict.fromkeys(([lm.event_id] if lm.event_id else []) + lm.candidates
+                                               + list(same["event_id"])))
             labels = {None: "Leave unmatched"}
             for eid in opts[1:]:
                 if eid in ev_idx.index:
-                    labels[eid] = ui.event_label(ev_idx.loc[eid].to_dict())
+                    e = ev_idx.loc[eid]
+                    if eid == lm.event_id:  # the fee the matcher found, as in the demo
+                        labels[eid] = f"Accept: {e['series']}, FA {int(e['fa_number'])}, due {ui.fmt_date(e['event_date'])}"
+                    else:
+                        labels[eid] = "Match to " + ui.event_label(e.to_dict())
             opts = [o for o in opts if o in labels]
-            choice = st.selectbox(f"Line {lm.line_no}: series {lm.series}, {lm.action_date:%d-%b-%Y}, "
-                                  f"{ui.money(lm.amount)}. {'; '.join(lm.notes)}",
-                                  opts, format_func=lambda e: labels[e], key=f"ovr_{key}_{lm.line_no}")
+            st.html(f"<div>{ui.chip('No match', 'nomatch')} <strong>Line {lm.line_no}:</strong> series "
+                    f"{ui.esc(lm.series)}, {ui.fmt_date(lm.action_date)}, {ui.money(lm.amount)}. "
+                    f'<span class="nyl-muted">{ui.esc(" ".join(lm.notes))}</span></div>')
+            choice = st.selectbox(f"Line {lm.line_no}", opts, format_func=lambda e: labels[e],
+                                  key=f"ovr_{key}_{lm.line_no}", label_visibility="collapsed")
             overrides[lm.line_no] = choice
 
     with st.form(f"post_{key}"):
         st.markdown("**Approval and payment**")
-        c1, c2, c3 = st.columns(3)
-        appr = c1.date_input("Approved for payment", value=inv.approval_date, format="DD/MM/YYYY",
-                             help="Pre-filled from the 'okay to pay' stamp when the PDF has one.")
-        paid = c2.date_input("Payment date", value=None, format="DD/MM/YYYY",
-                             help="Leave blank until the payment goes out. You can add it later on Invoices & payments.")
-        ref = c3.text_input("Payment reference", placeholder="optional")
-        st.caption(f"The approval is recorded as yours ({ui.user()}), from your company sign-in.")
-        notes = st.text_input("Notes", placeholder="optional")
+        c1, c2, c3, c4 = st.columns(4)
+        appr = c1.date_input("Approved for payment", value=inv.approval_date, format="DD/MM/YYYY")
+        c2.text_input("Approved by", value=ui.user(), disabled=True,
+                      help="Recorded from your company sign-in.")
+        paid = c3.date_input("Payment date", value=None, format="DD/MM/YYYY")
+        ref = c4.text_input("Payment reference", placeholder="optional")
+        st.caption('The approval date is pre-filled from the "okay to pay" stamp when the PDF has one. Leave the '
+                   "payment date blank until the money goes out.")
         go = st.form_submit_button(f"Post invoice {inv.invoice_no}", type="primary")
     if go:
         if appr is None and paid is not None:
@@ -137,11 +146,16 @@ for up in files:
                 counts = svc.post_invoice(ui.user(), result, file_name=up.name, file_bytes=raw,
                                           overrides=overrides, approval_date=appr,
                                           approved_by=ui.user() if appr else None, payment_date=paid,
-                                          payment_ref=ref or None, notes=notes or None)
+                                          payment_ref=ref or None)
                 ui.refresh()
                 cache.pop(key, None)
-                st.success(f"Invoice {inv.invoice_no} posted: {counts.get(GREEN, 0)} matched, "
-                           f"{counts.get(YELLOW, 0)} for review, {counts.get(MANUAL, 0)} matched manually, "
-                           f"{counts.get(RED, 0)} unmatched.")
+                left = counts.get(RED, 0)
+                st.success(
+                    f"Invoice {inv.invoice_no} posted. {counts.get(GREEN, 0)} matched, {counts.get(YELLOW, 0)} for "
+                    f"review, {counts.get(MANUAL, 0)} matched manually, {left} left unmatched"
+                    + (" and sent to Exceptions. " if left else ". ")
+                    + (f"Payment dated {ui.fmt_date(paid)}: these fees leave the accrual." if paid else
+                       "No payment date yet, so the fees show as approved and awaiting payment." if appr else
+                       "No approval date yet, so the fees show as invoiced and awaiting approval."))
             except Exception as exc:
                 st.error(f"Could not post invoice {inv.invoice_no}: {exc}")

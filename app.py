@@ -4,7 +4,7 @@ import os
 import streamlit as st
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-st.set_page_config(page_title="Citi Fee Accruals", page_icon=os.path.join(HERE, "assets", "nyl_logo.png"),
+st.set_page_config(page_title="Citi trustee fee accruals", page_icon=os.path.join(HERE, "assets", "nyl_logo.png"),
                    layout="wide")
 
 from views import ui  # noqa: E402  (after set_page_config)
@@ -19,21 +19,19 @@ if ui.load_settings().backend == "databricks" and not ui.sso_email():
     ui.footer()
     st.stop()
 
-pages = {
-    "Accrual": [
-        st.Page("views/overview.py", title="Overview", default=True),
-        st.Page("views/upload_invoice.py", title="Upload Citi invoice"),
-        st.Page("views/invoices.py", title="Invoices & payments"),
-        st.Page("views/month_end.py", title="Month-end report"),
-    ],
-    "Records": [
-        st.Page("views/contracts.py", title="Funding agreements"),
-        st.Page("views/followup.py", title="Citi follow-up"),
-        st.Page("views/exceptions.py", title="Exceptions"),
-        st.Page("views/audit.py", title="Audit history"),
-    ],
-    "Admin": [st.Page("views/setup.py", title="Setup")],
-}
+# One row of pages in the order and wording of the demo (demo/Citi_Accruals_Demo.html). Setup (initial load and
+# program fees) is not in the demo, so it comes last.
+pages = [
+    st.Page("views/overview.py", title="Overview", default=True),
+    st.Page("views/upload_invoice.py", title="Upload Citi invoice"),
+    st.Page("views/invoices.py", title="Invoices & payments"),
+    st.Page("views/contracts.py", title="Funding agreements"),
+    st.Page("views/followup.py", title="Citi follow-up"),
+    st.Page("views/month_end.py", title="Month-end"),
+    st.Page("views/exceptions.py", title="Exceptions"),
+    st.Page("views/audit.py", title="Audit history"),
+    st.Page("views/setup.py", title="Setup"),
+]
 nav = st.navigation(pages, position="top")
 
 with st.sidebar:

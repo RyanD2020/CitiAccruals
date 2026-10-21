@@ -6,8 +6,9 @@ import streamlit as st
 from core import reports
 from views import ui
 
-ui.header("Audit history", "Every change, who made it, when, and why. Field changes can be put back with one click; "
-          "invoice postings are undone with Reverse invoice.", eyebrow="Records")
+ui.header("Who changed what, when and why", "Every change is logged with the signed-in user, the old and new value, "
+          "and a reason. Field changes can be put back with one click; invoice postings are undone with Reverse invoice.",
+          eyebrow="Audit history")
 svc = ui.service()
 log = ui.data()["audit_log"].sort_values("ts", ascending=False)
 if log.empty:
@@ -27,13 +28,15 @@ if q:
     ql = q.lower()
     v = v[v.apply(lambda r: ql in " ".join(str(x) for x in r.values).lower(), axis=1)]
 
-table = pd.DataFrame({"When": v["ts"], "User": v["user_name"], "Action": v["action"], "Record": v["entity"],
-                      "Key": v["entity_id"], "Field": v["field"], "Old value": v["old_value"],
-                      "New value": v["new_value"], "Reason": v["reason"]})
+table = pd.DataFrame({
+    "When": v["ts"], "User": v["user_name"], "Action": v["action"].map(ui.audit_action),
+    "Record": [ui.audit_record(e, k) for e, k in zip(v["entity"], v["entity_id"])],
+    "Change": [ui.audit_change(fl, o, n) for fl, o, n in zip(v["field"], v["old_value"], v["new_value"])],
+    "Reason": v["reason"]})
 st.dataframe(table, hide_index=True, width="stretch", height=420,
-             column_config={"When": st.column_config.DatetimeColumn(format="DD MMM YYYY HH:mm"),
-                            "Old value": st.column_config.TextColumn(width="medium"),
-                            "New value": st.column_config.TextColumn(width="medium")})
+             column_config={"When": st.column_config.DatetimeColumn(format="D MMM YYYY HH:mm"),
+                            "Change": st.column_config.TextColumn(width="large"),
+                            "Reason": st.column_config.TextColumn(width="medium")})
 st.download_button("Download as Excel", reports.xlsx_from_frames({"Audit": table.assign(When=table["When"].astype(str))}),
                    file_name="Citi_accrual_audit.xlsx")
 

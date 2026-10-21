@@ -5,8 +5,8 @@ from core import reports
 from core.parsers import classify_file, unpack_zip
 from views import ui
 
-ui.header("Setup", "Load the existing folder once, then adjust program fees and accrual scope here.",
-          eyebrow="Admin")
+ui.header("Load the folder and set the fees", "Load the existing folder once, then adjust program fees and "
+          "accrual scope here.", eyebrow="Setup")
 svc = ui.service()
 d = ui.data()
 s = svc.settings

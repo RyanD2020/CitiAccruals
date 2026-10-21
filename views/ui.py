@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import html as _html
+import json
 import re
 from datetime import date
 from functools import lru_cache
@@ -17,6 +18,7 @@ import streamlit as st
 
 from core import engine
 from core.config import load_settings
+from core.dates import last_completed_month_end
 from core.db import make_backend
 from core.matcher import GREEN, MANUAL, PRIOR, RED, YELLOW
 from core.services import Service
@@ -177,7 +179,8 @@ def money(v) -> str:
 
 
 def fmt_date(v) -> str:
-    return v.strftime("%d-%b-%Y") if hasattr(v, "strftime") and not pd.isna(v) else ""
+    """'1 Oct 2026', as in the demo."""
+    return f"{v.day} {v:%b %Y}" if hasattr(v, "strftime") and not pd.isna(v) else ""
 
 
 def event_label(r) -> str:
@@ -189,7 +192,7 @@ def event_label(r) -> str:
 def style_col(df: pd.DataFrame, col: str, mapping: dict, money_cols=(), date_cols=()):
     """Styler for st.dataframe: money and date formats plus chip colours on one column."""
     fmt = {c: (lambda v: money(v) if pd.notna(v) else "") for c in money_cols if c in df.columns}
-    fmt.update({c: (lambda v: v.strftime("%d-%b-%Y") if hasattr(v, "strftime") else ("" if v is None or (isinstance(v, float) and pd.isna(v)) else v))
+    fmt.update({c: (lambda v: fmt_date(v) if hasattr(v, "strftime") else ("" if v is None or (isinstance(v, float) and pd.isna(v)) else v))
                 for c in date_cols if c in df.columns})
     sty = df.style.format(fmt, na_rep="")
     if col in df.columns:
@@ -202,6 +205,9 @@ def reason_box(key: str, placeholder: str = "Why are you making this change?") -
 
 
 # ------------------------------------------------------------------ branded HTML
+# Each *_html function returns a string so several pieces can be combined into one st.html block (for example a
+# Grey band holding a heading, tables and a card); the plain-named functions render directly.
+
 def header(title: str, lede: str | None = None, eyebrow: str | None = None) -> None:
     """Blue Georgia eyebrow above a Dark Blue Georgia title (the title is a real heading for accessibility)."""
     if eyebrow:
@@ -217,80 +223,184 @@ def chip(text: str, kind: str) -> str:
     return f'<span class="nyl-chip nyl-chip--{kind}">{esc(text)}</span>'
 
 
-def hero(eyebrow: str, title: str, figure: str, text: str, checks: list[tuple[str, str, str, str]],
+def section_html(eyebrow: str | None, title: str, text: str | None = None, level: int = 2) -> str:
+    """Eyebrow, heading and an optional paragraph, for use inside a larger HTML block."""
+    return ((f'<p class="nyl-eyebrow">{esc(eyebrow)}</p>' if eyebrow else "")
+            + f"<h{level}>{esc(title)}</h{level}>"
+            + (f'<p class="nyl-lede">{esc(text)}</p>' if text else ""))
+
+
+def section(eyebrow: str | None, title: str, text: str | None = None, level: int = 3) -> None:
+    st.html(f'<div class="nyl">{section_html(eyebrow, title, text, level)}</div>')
+
+
+def hero(eyebrow: str, title: str, figure: str, text: str, checks: list[tuple[str, str, str]],
          checks_title: str = "Reconciliation checks") -> None:
     """The signature diagonal: figure on the Dark Blue field, checks on the Grey side.
 
-    checks: (label, detail, chip text, chip kind) per row.
+    checks: (chip text, chip kind, sentence) per row; the chip comes first, as in the demo.
     """
-    rows = "".join(
-        f'<li><span>{esc(label)}<br><span class="nyl-muted">{esc(detail)}</span></span>{chip(ctext, kind)}</li>'
-        for label, detail, ctext, kind in checks)
+    rows = "".join(f"<li>{chip(ctext, kind)}<span>{esc(sentence)}</span></li>" for ctext, kind, sentence in checks)
     st.html(
         '<section class="nyl-hero"><div class="nyl-hero__field"></div><div class="nyl-hero__inner">'
         f'<div class="nyl-hero__main"><p class="nyl-eyebrow">{esc(eyebrow)}</p>'
-        f'<div class="nyl-title">{esc(title)}</div><div class="nyl-figure">{esc(figure)}</div><p>{esc(text)}</p></div>'
+        f'<h1 class="nyl-title">{esc(title)}</h1><div class="nyl-figure">{esc(figure)}</div><p>{esc(text)}</p></div>'
         f'<div class="nyl-hero__side"><h3>{esc(checks_title)}</h3><ul class="nyl-checks">{rows}</ul></div>'
         '</div></section>')
 
 
-def kpi_cards(cards: list[tuple[str, str, str]], band: bool = True) -> None:
-    """KPI cards (label, value, note), on a Grey band by default."""
-    cols = min(max(len(cards), 1), 4)
+def kpi_html(cards: list[tuple[str, str, str]], band: bool = True, columns: int | None = None) -> str:
+    cols = columns or min(max(len(cards), 1), 4)
     body = "".join(
         f'<div class="nyl-card"><p class="nyl-kpi__label">{esc(label)}</p><div class="nyl-kpi__value">{esc(value)}</div>'
         + (f'<div class="nyl-kpi__note">{esc(note)}</div>' if note else "") + "</div>"
         for label, value, note in cards)
     grid = f'<div class="nyl-grid nyl-grid--{cols}">{body}</div>'
-    st.html(f'<div class="nyl-band">{grid}</div>' if band else grid)
+    return f'<div class="nyl-band">{grid}</div>' if band else grid
+
+
+def kpi_cards(cards: list[tuple[str, str, str]], band: bool = True) -> None:
+    """KPI cards (label, value, note), on a Grey band by default."""
+    st.html(kpi_html(cards, band))
 
 
 DEFAULT_STEPS = [
-    ("Upload", "Drop in the Citi invoice PDF"),
-    ("Match", "Each line matched one to one to a fee"),
-    ("Approve and pay", "Approval and payment dates recorded"),
-    ("Report", "Month-end accrual and Excel package"),
+    ("Upload", "Drop in the Citi PDF. Every fee line is read automatically."),
+    ("Match", "Each line is matched one to one with an FA and its anniversary."),
+    ("Approve and pay", "One approval and one payment date cover the whole invoice."),
+    ("Report", "Month-end accrual, rollforward and Excel package for Finance."),
 ]
+
+
+def steps_html(items: list[tuple[str, str]] | None = None) -> str:
+    return '<ol class="nyl-steps">' + "".join(
+        f'<li class="nyl-step"><span class="nyl-step__title">{esc(t)}</span><span class="nyl-step__text">{esc(x)}</span></li>'
+        for t, x in (items or DEFAULT_STEPS)) + "</ol>"
 
 
 def steps(items: list[tuple[str, str]] | None = None) -> None:
     """The four-step chevron process."""
-    st.html('<ol class="nyl-steps">' + "".join(
-        f'<li class="nyl-step"><span class="nyl-step__title">{esc(t)}</span><span class="nyl-step__text">{esc(x)}</span></li>'
-        for t, x in (items or DEFAULT_STEPS)) + "</ol>")
+    st.html(steps_html(items))
 
 
-def html_table(df: pd.DataFrame, money_cols=(), date_cols=(), chips: dict[str, dict] | None = None,
-               total_last: bool = False) -> None:
+WRAP_COLS = ("Explanation", "Description", "Notes", "Change", "Reason")
+
+
+def table_html(df: pd.DataFrame, money_cols=(), date_cols=(), chips: dict[str, dict] | None = None,
+               total_last: bool = False, html_cols=(), num_cols=None) -> str:
     """Small read-only table: Dark Blue header, thin Grey rules, numbers right-aligned.
 
     chips: column -> {value: chip kind} to show that column's values as chips.
+    html_cols: columns whose values are already safe HTML (for example several chips).
+    num_cols: columns to right-align (default: money columns and numeric columns).
     total_last: show the last row as a total.
     """
     chips = chips or {}
-    num = {c for c in df.columns if c in money_cols or pd.api.types.is_numeric_dtype(df[c])}
+    num = set(num_cols) if num_cols is not None else {
+        c for c in df.columns if c in money_cols or pd.api.types.is_numeric_dtype(df[c])}
 
     def cell(col, v):
+        if col in html_cols:
+            return "" if v is None else str(v)
         if col in money_cols:
             return money(v)
         if col in date_cols:
             return esc(fmt_date(v))
         if col in chips and v in chips[col]:
             return chip(str(v), chips[col][v])
-        if v is None or (isinstance(v, float) and pd.isna(v)):
+        if v is None or v is pd.NA or (isinstance(v, float) and pd.isna(v)):
             return ""
         return esc(v)
 
-    head = "".join(f'<th class="{"num" if c in num else ""}">{esc(c)}</th>' for c in df.columns)
+    def cls(c):
+        return "num" if c in num else "wrap" if c in WRAP_COLS else ""
+
+    head = "".join(f'<th class="{cls(c)}">{esc(c)}</th>' for c in df.columns)
     body = []
     for i, r in enumerate(df.itertuples(index=False)):
-        cls = ' class="is-total"' if total_last and i == len(df) - 1 else ""
-        body.append(f"<tr{cls}>" + "".join(
-            f'<td class="{"num" if c in num else ""}">{cell(c, v)}</td>' for c, v in zip(df.columns, r)) + "</tr>")
-    st.html(f'<div class="nyl-table-wrap"><table class="nyl-table"><thead><tr>{head}</tr></thead>'
+        tr = ' class="is-total"' if total_last and i == len(df) - 1 else ""
+        body.append(f"<tr{tr}>" + "".join(f'<td class="{cls(c)}">{cell(c, v)}</td>' for c, v in zip(df.columns, r))
+                    + "</tr>")
+    return (f'<div class="nyl-table-wrap"><table class="nyl-table"><thead><tr>{head}</tr></thead>'
             f'<tbody>{"".join(body)}</tbody></table></div>')
+
+
+def html_table(df: pd.DataFrame, money_cols=(), date_cols=(), chips: dict[str, dict] | None = None,
+               total_last: bool = False, html_cols=(), num_cols=None) -> None:
+    st.html(table_html(df, money_cols, date_cols, chips, total_last, html_cols, num_cols))
+
+
+def notice(body_html: str) -> None:
+    """A plain notice card (no coloured side bar). body_html must already be escaped."""
+    st.html(f'<div class="nyl-notice">{body_html}</div>')
 
 
 def footer() -> None:
     st.html(f'<footer class="nyl-footer"><img class="nyl-footer__logo" src="{_logo_uri()}" alt="New York Life">'
             '<span>New York Life Insurance Company. For internal use only.</span></footer>')
+
+
+# ------------------------------------------------------------------ shared wording and data for the pages
+def default_as_of() -> date:
+    """Pages open on the last completed month-end, the date the accrual is reported at."""
+    return last_completed_month_end(date.today())
+
+
+_WORDS = ("zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen "
+          "seventeen eighteen nineteen").split()
+_TENS = "twenty thirty forty fifty sixty seventy eighty ninety".split()
+
+
+def count_words(n: int) -> str:
+    """'Thirteen', 'Forty-two'; digits from 100 up."""
+    if n < 20:
+        w = _WORDS[n]
+    elif n < 100:
+        w = _TENS[n // 10 - 2] + ("-" + _WORDS[n % 10] if n % 10 else "")
+    else:
+        return f"{n:,}"
+    return w[0].upper() + w[1:]
+
+
+def opening_bridge() -> tuple[dict, pd.DataFrame] | None:
+    """The tracker-to-tool bridge saved at the initial load (None if the data predates it)."""
+    s = data()["settings"]
+    row = s.loc[s["key"] == "opening_bridge", "value"]
+    if row.empty or not row.iloc[0]:
+        return None
+    saved = json.loads(row.iloc[0])
+    return saved["summary"], pd.DataFrame(saved["rows"])
+
+
+def bridge_reason(explanation: str, category: str) -> str:
+    """Plain-words reason for an opening-balance bridge item, as shown on the month-end page."""
+    e = explanation or ""
+    if e.startswith("Matures"):
+        return "Fee accrued in the maturity year, when none is due"
+    if "was paid on invoice" in e:
+        return "Fee paid, but still open in another year's tab"
+    if "not accrue" in e:
+        return "Fee due, but not accrued in the tracker"
+    return category
+
+
+_RECORD = {"contracts": "FA", "invoices": "Invoice", "fee_events": "Fee", "invoice_lines": "Invoice line",
+           "snapshots": "Month-end", "programs": "Program", "settings": "Setting", "data_issues": "Exception",
+           "documents": "Document", "system": "System"}
+
+
+def audit_record(entity: str, entity_id) -> str:
+    return f"{_RECORD.get(entity, entity)} {entity_id}".strip()
+
+
+def audit_action(action: str) -> str:
+    a = (action or "").replace("_", " ")
+    return a[:1].upper() + a[1:]
+
+
+def audit_change(field, old, new) -> str:
+    def show(v):
+        return "blank" if v is None or v == "" or (isinstance(v, float) and pd.isna(v)) else str(v)
+    if field and not (isinstance(field, float) and pd.isna(field)):
+        return f"{str(field).replace('_', ' ')}: {show(old)} to {show(new)}"
+    return "" if new is None or (isinstance(new, float) and pd.isna(new)) else str(new)

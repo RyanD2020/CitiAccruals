@@ -1,3 +1,4 @@
+"""Invoices & payments: the invoice list as in the demo's Invoices tab, with the payment and line tools below."""
 import pandas as pd
 import streamlit as st
 
@@ -5,8 +6,6 @@ from core.matcher import MANUAL, RED, YELLOW
 from core.parsers import file_hash, parse_invoice
 from views import ui
 
-ui.header("Invoices & payments", "Record approvals and payments, fix line matches, and attach missing PDFs. "
-          "One payment covers every fee on the invoice.", eyebrow="Accrual")
 if not ui.require_data():
     st.stop()
 
@@ -15,7 +14,7 @@ d = ui.data()
 inv = d["invoices"].copy()
 lines = d["invoice_lines"]
 if inv.empty:
-    st.info("No invoices posted yet.")
+    ui.header("No Citi invoices yet", eyebrow="Invoices & payments")
     st.page_link("views/upload_invoice.py", label="Upload a Citi invoice")
     st.stop()
 
@@ -28,6 +27,16 @@ def inv_status(r):
     return "Awaiting approval"
 
 
+n_red = int((lines["match_status"] == RED).sum())
+missing = inv[inv["file_path"].isna()]["invoice_no"].tolist()
+headline = (f"{ui.count_words(len(inv))} Citi invoices, every line accounted for" if not n_red else
+            f"{ui.count_words(len(inv))} Citi invoices, {n_red} lines need a decision")
+lede = "All invoices from the folder were loaded and matched."
+if missing:
+    lede += (f" Invoice {missing[0]} had no PDF, so it was rebuilt from the tracker and flagged." if len(missing) == 1
+             else f" Invoices {', '.join(missing)} had no PDF, so they were rebuilt from the tracker and flagged.")
+ui.header(headline, lede + " Select an invoice to see its lines.", eyebrow="Invoices & payments")
+
 cnt = lines.pivot_table(index="invoice_no", columns="match_status", values="line_id", aggfunc="count", fill_value=0)
 inv = inv.merge(cnt, left_on="invoice_no", right_index=True, how="left")
 for c in ("green", "yellow", "red", "manual", "prior"):
@@ -35,22 +44,29 @@ for c in ("green", "yellow", "red", "manual", "prior"):
         inv[c] = 0
 inv["Status"] = inv.apply(inv_status, axis=1)
 progs = d["programs"].set_index("program_code")["short_name"]
-show = inv.sort_values("invoice_date", ascending=False)
+show = inv.sort_values("invoice_date", ascending=False).reset_index(drop=True)
+
+
+def result_text(r) -> str:
+    parts = [(r["green"], "match"), (r["yellow"], "review"), (r["manual"], "manual match"), (r["red"], "no match"),
+             (r["prior"], "before tracking")]
+    return ", ".join(f"{int(n)} {t}" for n, t in parts if pd.notna(n) and n)
+
+
 table = pd.DataFrame({
     "Invoice": show["invoice_no"], "Program": show["program_code"].map(progs), "Invoice date": show["invoice_date"],
-    "Fees from": show["arrears_start"], "Fees to": show["arrears_end"], "Total": show["fee_total"],
-    "Lines": show["line_count"], "Match": show["green"].fillna(0).astype(int),
-    "Review": (show["yellow"].fillna(0) + show["manual"].fillna(0)).astype(int),
-    "No match": show["red"].fillna(0).astype(int), "Status": show["Status"], "Approved": show["approval_date"],
-    "Paid": show["payment_date"], "PDF": show["file_path"].notna().map({True: "Yes", False: "Missing"}),
+    "Fees due": show.apply(lambda r: f"{ui.fmt_date(r['arrears_start'])} to {ui.fmt_date(r['arrears_end'])}"
+                           if r["arrears_start"] else "", axis=1),
+    "Total": show["fee_total"], "Lines": show["line_count"], "Result": show.apply(result_text, axis=1),
+    "Status": show["Status"], "PDF": show["file_path"].notna().map({True: "On file", False: "Missing"}),
 })
-STATUS = {"Paid": ui.STATUS_STYLE["Paid"], "Approved": ui.STATUS_STYLE["Approved - awaiting payment"],
-          "Awaiting approval": ui.STATUS_STYLE["Due - not invoiced"]}
-st.dataframe(ui.style_col(table, "Status", STATUS, money_cols=("Total",),
-                          date_cols=("Invoice date", "Fees from", "Fees to", "Approved", "Paid"))
-             .map(lambda v: ui.cell_style("fail") if isinstance(v, (int, float)) and v > 0 else "",
-                  subset=["No match"]),
-             hide_index=True, width="stretch")
+STATUS = {"Paid": ui.cell_style("pass"), "Approved": ui.cell_style("info"), "Awaiting approval": ui.cell_style("info")}
+picked = st.dataframe(ui.style_col(table, "Status", STATUS, money_cols=("Total",), date_cols=("Invoice date",))
+                      .map(lambda v: ui.cell_style("fail") if isinstance(v, str) and "no match" in v else "",
+                           subset=["Result"]),
+                      hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row",
+                      key="invoice_table")
+sel = picked.selection.rows if picked is not None else []
 
 unpaid = inv[inv["payment_date"].isna()]
 if len(unpaid):
@@ -75,18 +91,31 @@ if len(unpaid):
                     st.success(f"Payment recorded on {len(pick)} invoice(s).")
                     st.rerun()
 
-st.divider()
-choice = st.selectbox("Open an invoice", list(show["invoice_no"]),
-                      format_func=lambda n: f"{n} ({show.loc[show['invoice_no'] == n, 'Status'].iloc[0]})")
+if not sel:
+    st.caption("Select an invoice above to see its lines.")
+    st.stop()
+
+choice = show.loc[sel[0], "invoice_no"]
 row = inv[inv["invoice_no"] == choice].iloc[0]
 st.subheader(f"Invoice {choice}")
 st.write(f"{progs.get(row['program_code'], row['program_code'])}, total {ui.money(row['fee_total'])}, "
-         f"{int(row['line_count'] or 0)} lines. Source: {row['source']}. {row['notes'] or ''}")
+         f"{int(row['line_count'] or 0)} lines. {row['notes'] or ''}")
 
-c1, c2 = st.columns([1, 1])
-with c1:
+il = lines[lines["invoice_no"] == choice].sort_values("line_no")
+ev = d["fee_events"].merge(d["contracts"][["fa_number", "series"]], on="fa_number", how="left").set_index("event_id")
+lt = pd.DataFrame({
+    "Line": il["line_no"], "Result": il["match_status"].map(ui.RESULT_LABEL), "Citi series": il["series"],
+    "Fee date": il["action_date"], "Amount": il["amount"], "FA #": il["fa_number"],
+    "Our series": il["event_id"].map(lambda e: ev.loc[e, "series"] if e in ev.index else ""),
+    "Notes": il["match_notes"],
+})
+st.dataframe(ui.style_col(lt, "Result", ui.RESULT_STYLE, money_cols=("Amount",), date_cols=("Fee date",)),
+             hide_index=True, width="stretch",
+             column_config={"FA #": st.column_config.NumberColumn(format="%d"),
+                            "Notes": st.column_config.TextColumn(width="large")})
+
+with st.expander("Approval and payment", expanded=row["payment_date"] is None):
     with st.form(f"dates_{choice}"):
-        st.markdown("**Approval and payment**")
         appr = st.date_input("Approved for payment", value=row["approval_date"], format="DD/MM/YYYY")
         st.caption(f"Approved by {row['approved_by']}." if row["approved_by"] else "Not approved yet.")
         b1, b2 = st.columns(2)
@@ -109,8 +138,8 @@ with c1:
                 ui.refresh()
                 st.success(f"Saved {len(changed)} change(s)." if changed else "Nothing changed.")
                 st.rerun()
-with c2:
-    st.markdown("**Source PDF**")
+
+with st.expander("Source PDF"):
     raw = svc.files.load(row["file_path"]) if row["file_path"] else None
     if raw:
         st.download_button("Download PDF", raw, file_name=row["file_name"] or f"{choice}.pdf", mime="application/pdf")
@@ -133,19 +162,6 @@ with c2:
                     st.success("PDF attached.")
             except Exception as exc:
                 st.error(f"Could not read the PDF: {exc}")
-
-il = lines[lines["invoice_no"] == choice].sort_values("line_no")
-ev = d["fee_events"].merge(d["contracts"][["fa_number", "series"]], on="fa_number", how="left").set_index("event_id")
-lt = pd.DataFrame({
-    "Line": il["line_no"], "Result": il["match_status"].map(ui.RESULT_LABEL), "Citi series": il["series"],
-    "Citi fee date": il["action_date"], "Amount": il["amount"], "FA #": il["fa_number"],
-    "Matched fee": il["event_id"].map(lambda e: ui.event_label(ev.loc[e].to_dict()) if e in ev.index else ""),
-    "Notes": il["match_notes"],
-})
-st.dataframe(ui.style_col(lt, "Result", ui.RESULT_STYLE, money_cols=("Amount",), date_cols=("Citi fee date",)),
-             hide_index=True, width="stretch",
-             column_config={"FA #": st.column_config.NumberColumn(format="%d"),
-                            "Notes": st.column_config.TextColumn(width="large")})
 
 fixable = il[il["match_status"].isin([RED, YELLOW, MANUAL])]
 if len(fixable):

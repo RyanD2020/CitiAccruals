@@ -1,3 +1,4 @@
+"""Funding agreements: the agreement list as in the demo's Funding agreements tab, plus the tools to add and edit."""
 import re
 from datetime import date
 
@@ -8,11 +9,14 @@ from core import engine
 from core.parsers import parse_fa_register, parse_term_sheet
 from views import ui
 
-ui.header("Funding agreements", "Every FA and its fee schedule. New agreements come from a term sheet or the "
-          "FA register; the schedule of annual fees is generated automatically.", eyebrow="Records")
+ui.header("Each FA carries its own fee schedule",
+          "Built from the FA register. Fees fall due on the issue date and every anniversary before maturity; "
+          "reopenings are separate FAs with their own dates. Select a row to see its schedule.",
+          eyebrow="Funding agreements")
 svc = ui.service()
 d = ui.data()
 today = date.today()
+as_of = ui.default_as_of()
 progs = d["programs"].set_index("program_code")["short_name"]
 
 tab_list, tab_ts, tab_reg, tab_manual = st.tabs(["Agreements", "Add from term sheet", "Sync FA register", "Add manually"])
@@ -22,107 +26,110 @@ with tab_list:
     if d["contracts"].empty:
         st.info("No agreements yet. Load the folder on Setup, or add one from a term sheet.")
     else:
-        lg = ui.ledger(today).frame
+        lg = ui.ledger(as_of).frame
         c = d["contracts"].copy()
         agg = lg.groupby("fa_number").agg(
             fees=("event_id", "count"),
             paid=("status", lambda s: int((s == engine.STATUS_PAID).sum())),
             open_amt=("expected_amount", lambda s: float(s[lg.loc[s.index, "outstanding"]].sum())),
-            last_billed=("invoice_no", lambda s: s.dropna().iloc[-1] if s.notna().any() else None),
         )
         c = c.merge(agg, left_on="fa_number", right_index=True, how="left")
-        c["State"] = c["maturity_date"].map(lambda m: "Active" if m and m > today else "Matured")
-        f1, f2, f3 = st.columns([1, 1, 2])
-        prog = f1.selectbox("Program", ["All"] + list(progs.values))
-        state = f2.selectbox("State", ["Active", "Matured", "All"])
-        q = f3.text_input("Search series, FA or ISIN")
-        view = c
+        c["active"] = c["maturity_date"].map(lambda m: bool(m and m > as_of))
+        f1, f2, f3, f4 = st.columns([2, 1, 1.4, 1.4])
+        q = f1.text_input("Search series or FA", placeholder="e.g. 2024-1 or 70693")
+        prog = f2.selectbox("Program", ["All"] + sorted(set(progs.values)))
+        only_open = f3.toggle("Only with an outstanding fee", value=False)
+        matured = f4.toggle("Include matured agreements", value=False)
+        view = c if matured else c[c["active"]]
         if prog != "All":
             view = view[view["program_code"].map(progs) == prog]
-        if state != "All":
-            view = view[view["State"] == state]
+        if only_open:
+            view = view[view["open_amt"].fillna(0) > 0]
         if q:
             ql = q.lower()
             view = view[view.apply(lambda r: ql in f"{r['series']} {r['fa_number']} {r['isin'] or ''}".lower(), axis=1)]
+        view = view.sort_values("fa_number", ascending=False).reset_index(drop=True)
         table = pd.DataFrame({
             "FA #": view["fa_number"].astype(int), "Series": view["series"], "Program": view["program_code"].map(progs),
-            "Issue date": view["issue_date"], "Maturity": view["maturity_date"], "State": view["State"],
-            "Reopening of": view["reopening_of"], "Fees tracked": view["fees"].fillna(0).astype(int),
-            "Paid": view["paid"].fillna(0).astype(int), "Outstanding": view["open_amt"].fillna(0),
-            "Last invoice": view["last_billed"],
-        }).sort_values("FA #", ascending=False)
-        st.dataframe(ui.style_col(table, "", {}, money_cols=("Outstanding",), date_cols=("Issue date", "Maturity")),
-                     hide_index=True, width="stretch", height=360,
-                     column_config={"FA #": st.column_config.NumberColumn(format="%d"),
-                                    "Reopening of": st.column_config.NumberColumn(format="%d")})
-        st.caption(f"{len(table)} agreements, {ui.money(table['Outstanding'].sum())} outstanding.")
+            "Issue date": view["issue_date"], "Maturity": view["maturity_date"], "Reopening of": view["reopening_of"],
+            "Fees tracked": view["fees"].fillna(0).astype(int), "Paid": view["paid"].fillna(0).astype(int),
+            "Outstanding": view["open_amt"].fillna(0),
+        })
+        picked = st.dataframe(ui.style_col(table, "", {}, money_cols=("Outstanding",), date_cols=("Issue date", "Maturity")),
+                              hide_index=True, width="stretch", height=420, on_select="rerun",
+                              selection_mode="single-row", key="agreement_table",
+                              column_config={"FA #": st.column_config.NumberColumn(format="%d"),
+                                             "Reopening of": st.column_config.NumberColumn(format="%d")})
+        st.caption(f"{len(table)} agreements {'' if matured else 'active '}at {ui.fmt_date(as_of)}, "
+                   f"{ui.money(table['Outstanding'].sum())} outstanding.")
+        sel = picked.selection.rows if picked is not None else []
 
-        st.divider()
-        fa = st.selectbox("Open an agreement", list(table["FA #"]),
-                          format_func=lambda x: f"FA {x}, series {c.loc[c['fa_number'] == x, 'series'].iloc[0]}")
-        rec = c[c["fa_number"] == fa].iloc[0]
-        st.subheader(f"Series {rec['series']}, FA {fa}")
-        st.write(f"{progs.get(rec['program_code'], rec['program_code'])}. Issued {rec['issue_date']:%d %B %Y}, "
-                 f"matures {rec['maturity_date']:%d %B %Y}. ISIN {rec['isin'] or 'not recorded'}. "
-                 f"{'Reopening of FA ' + str(int(rec['reopening_of'])) + '. ' if pd.notna(rec['reopening_of']) else ''}"
-                 f"Source: {rec['source'] or 'n/a'}.")
-        evs = lg[lg["fa_number"] == fa]
-        et = pd.DataFrame({"Fee #": evs["period_no"], "Due": evs["event_date"], "Fee": evs["expected_amount"],
-                           "Status": evs["status"], "Invoice": evs["invoice_no"], "Approved": evs["approval_date"],
-                           "Paid": evs["payment_date"], "Note": evs["write_off_reason"]})
-        st.dataframe(ui.style_col(et, "Status", ui.STATUS_STYLE, money_cols=("Fee",), date_cols=("Due", "Approved", "Paid")),
-                     hide_index=True, width="stretch")
+        if not sel:
+            st.caption("Select an agreement above to see its fee schedule.")
+        else:
+            fa = int(table.loc[sel[0], "FA #"])
+            rec = c[c["fa_number"] == fa].iloc[0]
+            st.subheader(f"Fee schedule for {rec['series']} (FA {fa})")
+            st.write(f"{progs.get(rec['program_code'], rec['program_code'])}. Issued {ui.fmt_date(rec['issue_date'])}, "
+                     f"matures {ui.fmt_date(rec['maturity_date'])}. ISIN {rec['isin'] or 'not recorded'}. "
+                     f"{'Reopening of FA ' + str(int(rec['reopening_of'])) + '. ' if pd.notna(rec['reopening_of']) else ''}"
+                     f"Source: {rec['source'] or 'n/a'}.")
+            evs = lg[lg["fa_number"] == fa]
+            et = pd.DataFrame({"Due": evs["event_date"], "Fee": evs["expected_amount"], "Status": evs["status"],
+                               "Citi invoice": evs["invoice_no"], "Note": evs["write_off_reason"]})
+            st.dataframe(ui.style_col(et, "Status", ui.STATUS_STYLE, money_cols=("Fee",), date_cols=("Due",)),
+                         hide_index=True, width="stretch")
 
-        e1, e2 = st.columns(2)
-        with e1, st.form(f"edit_{fa}"):
-            st.markdown("**Edit agreement**")
-            series = st.text_input("Series (display)", value=rec["series"])
-            isin = st.text_input("ISIN", value=rec["isin"] or "")
-            a, b = st.columns(2)
-            iss = a.date_input("Issue (settlement) date", value=rec["issue_date"], format="DD/MM/YYYY")
-            mat = b.date_input("Maturity date", value=rec["maturity_date"], format="DD/MM/YYYY")
-            fee = st.number_input("Annual fee override (blank uses the program fee)",
-                                  value=None if pd.isna(rec["annual_fee_override"]) else float(rec["annual_fee_override"]),
-                                  min_value=0.0, step=500.0)
-            notes = st.text_area("Notes", value=rec["notes"] or "", height=70)
-            reason = st.text_input("Reason (saved to the audit log)")
-            if st.form_submit_button("Save changes", type="primary"):
-                if not reason:
-                    st.error("Add a reason.")
-                else:
-                    warn = svc.update_contract(ui.user(), int(fa), {
-                        "series": series, "isin": isin or None, "issue_date": iss, "maturity_date": mat,
-                        "annual_fee_override": fee, "notes": notes or None}, reason)
-                    ui.refresh()
-                    for w in warn:
-                        st.warning(w)
-                    st.success("Saved. The fee schedule was refreshed if dates or fee changed.")
-                    st.rerun()
-        with e2, st.form(f"wo_{fa}"):
-            st.markdown("**Write off or reinstate a fee**")
-            st.caption("Use when Citi confirms it will not bill a fee, or the business decides to stop accruing it.")
-            cand = evs[evs["invoice_no"].isna()]
-            pick = st.selectbox("Fee", list(cand["event_id"]),
-                                format_func=lambda e: f"{cand.loc[cand['event_id'] == e, 'event_date'].iloc[0]:%d-%b-%Y}, "
-                                                      f"{cand.loc[cand['event_id'] == e, 'status'].iloc[0]}")
-            wod = st.date_input("Write-off date", value=today, format="DD/MM/YYYY")
-            reason = st.text_input("Reason (saved to the audit log)", key=f"wor_{fa}")
-            x, y = st.columns(2)
-            do_wo = x.form_submit_button("Write off")
-            do_re = y.form_submit_button("Reinstate")
-            if (do_wo or do_re) and pick:
-                if not reason:
-                    st.error("Add a reason.")
-                else:
-                    try:
-                        if do_wo:
-                            svc.write_off(ui.user(), pick, wod, reason)
+            with st.expander("Edit this agreement"):
+                with st.form(f"edit_{fa}"):
+                    series = st.text_input("Series (display)", value=rec["series"])
+                    isin = st.text_input("ISIN", value=rec["isin"] or "")
+                    a, b = st.columns(2)
+                    iss = a.date_input("Issue (settlement) date", value=rec["issue_date"], format="DD/MM/YYYY")
+                    mat = b.date_input("Maturity date", value=rec["maturity_date"], format="DD/MM/YYYY")
+                    fee = st.number_input("Annual fee override (blank uses the program fee)",
+                                          value=None if pd.isna(rec["annual_fee_override"]) else float(rec["annual_fee_override"]),
+                                          min_value=0.0, step=500.0)
+                    notes = st.text_area("Notes", value=rec["notes"] or "", height=70)
+                    reason = st.text_input("Reason (saved to the audit log)")
+                    if st.form_submit_button("Save changes", type="primary"):
+                        if not reason:
+                            st.error("Add a reason.")
                         else:
-                            svc.reinstate(ui.user(), pick, reason)
-                        ui.refresh()
-                        st.rerun()
-                    except Exception as exc:
-                        st.error(str(exc))
+                            warn = svc.update_contract(ui.user(), int(fa), {
+                                "series": series, "isin": isin or None, "issue_date": iss, "maturity_date": mat,
+                                "annual_fee_override": fee, "notes": notes or None}, reason)
+                            ui.refresh()
+                            for w in warn:
+                                st.warning(w)
+                            st.success("Saved. The fee schedule was refreshed if dates or fee changed.")
+                            st.rerun()
+
+            with st.expander("Write off or reinstate a fee"):
+                with st.form(f"wo_{fa}"):
+                    st.caption("Use when Citi confirms it will not bill a fee, or the business decides to stop accruing it.")
+                    cand = evs[evs["invoice_no"].isna()]
+                    pick = st.selectbox("Fee", list(cand["event_id"]),
+                                        format_func=lambda e: f"{cand.loc[cand['event_id'] == e, 'event_date'].iloc[0]:%d-%b-%Y}, "
+                                                              f"{cand.loc[cand['event_id'] == e, 'status'].iloc[0]}")
+                    wod = st.date_input("Write-off date", value=today, format="DD/MM/YYYY")
+                    reason = st.text_input("Reason (saved to the audit log)", key=f"wor_{fa}")
+                    x, y = st.columns(2)
+                    do_wo = x.form_submit_button("Write off")
+                    do_re = y.form_submit_button("Reinstate")
+                    if (do_wo or do_re) and pick:
+                        if not reason:
+                            st.error("Add a reason.")
+                        else:
+                            try:
+                                if do_wo:
+                                    svc.write_off(ui.user(), pick, wod, reason)
+                                else:
+                                    svc.reinstate(ui.user(), pick, reason)
+                                ui.refresh()
+                                st.rerun()
+                            except Exception as exc:
+                                st.error(str(exc))
 
 
 def schedule_preview(program_code, issue, maturity, fee_override=None):
