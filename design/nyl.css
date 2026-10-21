@@ -1,5 +1,6 @@
 /* New York Life design for the Citi fee accruals tool.
-   Single source of truth: the HTML demo inlines this file and the Streamlit app injects it.
+   The Streamlit app injects this file (views/ui.py css()). demo/Citi_Accruals_Demo.html is a standalone file
+   with its own styles.
    Rules in plain words: design/BRAND.md. Every colour is a variable so dark mode only swaps values. */
 
 /* ------------------------------------------------------------------ tokens: light (default) */

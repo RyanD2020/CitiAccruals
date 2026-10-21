@@ -1,7 +1,8 @@
 # New York Life design rules for the Citi fee accruals tool
 
-These rules apply to the HTML demo and to the Streamlit app. Both use one stylesheet,
-[nyl.css](nyl.css). If a rule here and the stylesheet ever disagree, fix the stylesheet.
+These rules apply to the Streamlit app and to the HTML demo (`demo/Citi_Accruals_Demo.html`). The app uses one
+stylesheet, [nyl.css](nyl.css). The demo is a standalone file with its own styles. If a rule here and the
+stylesheet ever disagree, fix the stylesheet.
 
 ## Colour
 
