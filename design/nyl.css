@@ -1,0 +1,405 @@
+/* New York Life design for the Citi fee accruals tool.
+   Single source of truth: the HTML demo inlines this file and the Streamlit app injects it.
+   Rules in plain words: design/BRAND.md. Every colour is a variable so dark mode only swaps values. */
+
+/* ------------------------------------------------------------------ tokens: light (default) */
+:root {
+  /* brand palette */
+  --nyl-dark-blue: #000A62;
+  --nyl-blue: #0468FF;
+  --nyl-green: #016355;
+  --nyl-light-green: #A5EFBF;
+  --nyl-grey: #E3E0DD;
+  --nyl-white: #FFFFFF;
+
+  /* surfaces */
+  --bg: #FFFFFF;
+  --surface: #FFFFFF;            /* cards */
+  --band: #E3E0DD;               /* alternate band behind KPI cards etc. */
+  --header-bg: #FFFFFF;
+  --border: #E3E0DD;
+  --input-border: #767676;
+
+  /* text */
+  --text: #000000;
+  --text-muted: #4D4D4D;
+  --heading: #000A62;
+  --eyebrow: #0468FF;
+  --link: #0468FF;
+  --link-hover: #000A62;
+  --metric: #000A62;
+
+  /* buttons */
+  --btn-bg: #000A62;
+  --btn-text: #FFFFFF;
+  --btn-secondary-bg: transparent;
+  --btn-secondary-text: #000A62;
+  --btn-secondary-border: #000A62;
+  --focus: #0468FF;
+  --btn-hover-bg: #0468FF;
+  --btn-hover-text: #FFFFFF;
+
+  /* tables */
+  --table-head-bg: #000A62;
+  --table-head-text: #FFFFFF;
+  --table-rule: #E3E0DD;
+  --table-hover: #F4F3F1;
+
+  /* hero (signature diagonal) */
+  --hero-field: #000A62;
+  --hero-field-text: #FFFFFF;
+  --hero-field-eyebrow: #80BAFF;
+  --hero-side: #E3E0DD;
+  --hero-side-text: #000000;
+  --hero-side-heading: #000A62;
+  --hero-side-rule: #C9C5C1;
+
+  /* status chips */
+  --chip-match-bg: #A5EFBF;   --chip-match-text: #016355;
+  --chip-review-bg: #FFE8CF;  --chip-review-text: #6B3B00;
+  --chip-fail-bg: #FBE3E4;    --chip-fail-text: #9B111E;
+  --chip-info-bg: #DCEBFF;    --chip-info-text: #000A62;
+  --chip-plain-border: #E3E0DD; --chip-plain-text: #000000;
+
+  /* process steps */
+  --step-1-bg: #000A62; --step-1-text: #FFFFFF;
+  --step-2-bg: #0468FF; --step-2-text: #FFFFFF;
+  --step-3-bg: #016355; --step-3-text: #FFFFFF;
+  --step-4-bg: #A5EFBF; --step-4-text: #000A62;
+
+  /* charts */
+  --chart-bar: #000A62;
+  --chart-axis: #888888;
+  --chart-label: #000000;
+
+  /* toast */
+  --toast-bg: #000A62;
+  --toast-text: #FFFFFF;
+
+  /* type */
+  --font-head: Georgia, "Times New Roman", serif;
+  --font-body: Arial, Helvetica, "Liberation Sans", sans-serif;
+  --chip-radius: 2px;
+}
+
+/* ------------------------------------------------------------------ tokens: dark */
+:root[data-theme="dark"] {
+  --bg: #000A62;
+  --surface: #0A1570;
+  --band: #111D7C;
+  --header-bg: #000A62;
+  --border: #2A3590;
+  --input-border: #80BAFF;
+  --text: #FFFFFF;
+  --text-muted: #C9CEF0;
+  --heading: #FFFFFF;
+  --eyebrow: #80BAFF;
+  --link: #80BAFF;
+  --link-hover: #FFFFFF;
+  --metric: #FFFFFF;
+  --btn-bg: #FFFFFF;
+  --btn-text: #000A62;
+  --btn-secondary-text: #FFFFFF;
+  --btn-secondary-border: #FFFFFF;
+  --focus: #80BAFF;
+  --table-head-bg: #111D7C;
+  --table-head-text: #FFFFFF;
+  --table-rule: #2A3590;
+  --table-hover: #111D7C;
+  --hero-field: #0A1570;
+  --hero-field-text: #FFFFFF;
+  --hero-field-eyebrow: #80BAFF;
+  --hero-side: #111D7C;
+  --hero-side-text: #FFFFFF;
+  --hero-side-heading: #FFFFFF;
+  --hero-side-rule: #2A3590;
+  --chip-plain-border: #2A3590; --chip-plain-text: #FFFFFF;
+  --step-1-bg: #1A2690;
+  --chart-bar: #80BAFF;
+  --chart-axis: #888888;
+  --chart-label: #FFFFFF;
+  --toast-bg: #FFFFFF;
+  --toast-text: #000A62;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000A62;
+    --surface: #0A1570;
+    --band: #111D7C;
+    --header-bg: #000A62;
+    --border: #2A3590;
+    --input-border: #80BAFF;
+    --text: #FFFFFF;
+    --text-muted: #C9CEF0;
+    --heading: #FFFFFF;
+    --eyebrow: #80BAFF;
+    --link: #80BAFF;
+    --link-hover: #FFFFFF;
+    --metric: #FFFFFF;
+    --btn-bg: #FFFFFF;
+    --btn-text: #000A62;
+    --btn-secondary-text: #FFFFFF;
+    --btn-secondary-border: #FFFFFF;
+    --focus: #80BAFF;
+    --table-head-bg: #111D7C;
+    --table-head-text: #FFFFFF;
+    --table-rule: #2A3590;
+    --table-hover: #111D7C;
+    --hero-field: #0A1570;
+    --hero-field-text: #FFFFFF;
+    --hero-field-eyebrow: #80BAFF;
+    --hero-side: #111D7C;
+    --hero-side-text: #FFFFFF;
+    --hero-side-heading: #FFFFFF;
+    --hero-side-rule: #2A3590;
+    --chip-plain-border: #2A3590; --chip-plain-text: #FFFFFF;
+    --step-1-bg: #1A2690;
+    --chart-bar: #80BAFF;
+    --chart-axis: #888888;
+    --chart-label: #FFFFFF;
+    --toast-bg: #FFFFFF;
+    --toast-text: #000A62;
+  }
+}
+
+/* ------------------------------------------------------------------ base type */
+.nyl, .nyl-root {
+  font-family: var(--font-body);
+  color: var(--text);
+  background: var(--bg);
+}
+.nyl h1, .nyl h2, .nyl h3, .nyl h4,
+.nyl-title, .nyl-metric, .nyl-figure {
+  font-family: var(--font-head);
+  font-weight: 400;
+  color: var(--heading);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.nyl h1, .nyl-title { font-size: 2.2rem; line-height: 1.15; margin: 0 0 0.5rem; }
+.nyl h2 { font-size: 1.6rem; line-height: 1.2; margin: 0 0 0.5rem; }
+.nyl h3 { font-size: 1.25rem; line-height: 1.25; margin: 0 0 0.4rem; }
+.nyl a { color: var(--link); }
+.nyl a:hover { color: var(--link-hover); }
+.nyl-eyebrow {
+  font-family: var(--font-head);
+  color: var(--eyebrow);
+  font-size: 1.05rem;
+  margin: 0 0 0.25rem;
+}
+.nyl-lede { max-width: 68ch; margin: 0 0 1rem; color: var(--text); }
+.nyl-muted { color: var(--text-muted); }
+.nyl-num { font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------------ header, tabs, footer */
+.nyl-header {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 1.25rem;
+  padding: 0.6rem 1.5rem;
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--border);
+}
+.nyl-header__logo { height: 40px; width: auto; display: block; }
+.nyl-header__name { font-family: var(--font-head); color: var(--heading); font-size: 1.3rem; white-space: nowrap; }
+.nyl-tabs { display: flex; flex-wrap: nowrap; gap: 0; margin-left: auto; }
+.nyl-tab {
+  font-family: var(--font-body); font-size: 0.92rem;
+  padding: 0.55rem 0.7rem;
+  background: transparent; color: var(--heading);
+  border: 0; border-radius: 0; cursor: pointer; white-space: nowrap;
+}
+.nyl-tab:hover { text-decoration: underline; }
+.nyl-tab[aria-selected="true"] { background: var(--btn-bg); color: var(--btn-text); text-decoration: none; }
+.nyl-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.nyl-footer {
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  padding: 1.25rem 1.5rem; margin-top: 2.5rem;
+  border-top: 1px solid var(--border);
+  background: var(--header-bg); color: var(--text); font-size: 0.9rem;
+}
+.nyl-footer__logo { height: 32px; width: auto; display: block; }
+
+/* ------------------------------------------------------------------ layout */
+.nyl-section { padding: 2rem 1.5rem; }
+.nyl-band { background: var(--band); padding: 1.75rem 1.5rem; }
+.nyl-grid { display: grid; gap: 1rem; }
+.nyl-grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.nyl-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.nyl-grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 960px) {
+  .nyl-grid--3, .nyl-grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .nyl-grid--2, .nyl-grid--3, .nyl-grid--4 { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ------------------------------------------------------------------ cards and KPIs */
+.nyl-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0;
+  padding: 1rem 1.15rem;
+  color: var(--text);
+}
+.nyl-card > h3:first-child, .nyl-card > h4:first-child { margin-top: 0; }
+.nyl-kpi__label { font-size: 0.92rem; color: var(--text); margin: 0 0 0.35rem; }
+.nyl-kpi__value, .nyl-metric {
+  font-family: var(--font-head); color: var(--metric);
+  font-size: 2rem; line-height: 1.1; font-variant-numeric: tabular-nums;
+}
+.nyl-kpi__note { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.35rem; }
+.nyl-figure { font-size: 3.2rem; line-height: 1.05; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------------ hero with the signature diagonal */
+.nyl-hero {
+  position: relative;
+  background: var(--hero-side);
+  color: var(--hero-side-text);
+  min-height: 300px;
+  overflow: hidden;
+}
+.nyl-hero__field {
+  position: absolute; inset: 0;
+  background: var(--hero-field);
+  clip-path: polygon(0 0, 60% 0, 51% 100%, 0 100%);
+}
+.nyl-hero__inner {
+  position: relative;
+  display: grid;
+  grid-template-columns: 47% 1fr;   /* left text stays left of the 51% bottom of the diagonal */
+  min-height: 300px;
+}
+.nyl-hero__main { padding: 2.25rem 2rem 2.25rem 1.5rem; color: var(--hero-field-text); }
+.nyl-hero__main .nyl-eyebrow { color: var(--hero-field-eyebrow); }
+.nyl-hero__main .nyl-title, .nyl-hero__main .nyl-figure, .nyl-hero__main h1 { color: var(--hero-field-text); }
+.nyl-hero__main p { color: var(--hero-field-text); max-width: 48ch; }
+.nyl-hero__side {
+  /* starts right of the 60% top of the diagonal */
+  margin-left: calc((60% - 47%) / 0.53 + 1.5rem);
+  padding: 2.25rem 1.5rem 2.25rem 0;
+  color: var(--hero-side-text);
+}
+.nyl-hero__side h2, .nyl-hero__side h3 { color: var(--hero-side-heading); }
+@media (max-width: 960px) {
+  .nyl-hero { background: var(--hero-side); min-height: 0; }
+  .nyl-hero__field { display: none; }
+  .nyl-hero__inner { display: block; min-height: 0; }
+  .nyl-hero__main {
+    background: var(--hero-field);
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 32px), 0 100%);
+    padding-bottom: calc(2.25rem + 32px);
+  }
+  .nyl-hero__side { margin-left: 0; padding: 1.5rem; background: var(--hero-side); }
+}
+
+/* ------------------------------------------------------------------ chips */
+.nyl-chip {
+  display: inline-block;
+  padding: 0.12rem 0.5rem;
+  border-radius: var(--chip-radius);
+  font-family: var(--font-body); font-size: 0.85rem; font-weight: 700; line-height: 1.4;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.nyl-chip--match, .nyl-chip--pass { background: var(--chip-match-bg); color: var(--chip-match-text); }
+.nyl-chip--review { background: var(--chip-review-bg); color: var(--chip-review-text); }
+.nyl-chip--nomatch, .nyl-chip--fail { background: var(--chip-fail-bg); color: var(--chip-fail-text); }
+.nyl-chip--info, .nyl-chip--approved, .nyl-chip--manual { background: var(--chip-info-bg); color: var(--chip-info-text); }
+.nyl-chip--plain { background: transparent; color: var(--chip-plain-text); border-color: var(--chip-plain-border); font-weight: 400; }
+.nyl-checks { list-style: none; margin: 0; padding: 0; }
+.nyl-checks li { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline;
+                 padding: 0.45rem 0; border-bottom: 1px solid var(--border); }
+.nyl-hero__side .nyl-checks li { border-bottom-color: var(--hero-side-rule); }
+
+/* ------------------------------------------------------------------ process steps (chevrons) */
+.nyl-steps { display: flex; gap: 4px; list-style: none; margin: 0; padding: 0; }
+.nyl-step {
+  flex: 1 1 0;
+  padding: 0.85rem 1.6rem 0.85rem 2rem;
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%, 18px 50%);
+  font-family: var(--font-body);
+}
+.nyl-step:first-child { clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%); padding-left: 1.1rem; }
+.nyl-step__title { font-family: var(--font-head); font-size: 1.1rem; display: block; }
+.nyl-step__text { font-size: 0.85rem; display: block; margin-top: 0.15rem; }
+.nyl-step:nth-child(1) { background: var(--step-1-bg); color: var(--step-1-text); }
+.nyl-step:nth-child(2) { background: var(--step-2-bg); color: var(--step-2-text); }
+.nyl-step:nth-child(3) { background: var(--step-3-bg); color: var(--step-3-text); }
+.nyl-step:nth-child(4) { background: var(--step-4-bg); color: var(--step-4-text); }
+@media (max-width: 600px) {
+  .nyl-steps { flex-direction: column; }
+  .nyl-step, .nyl-step:first-child { clip-path: none; padding: 0.75rem 1rem; }
+}
+
+/* ------------------------------------------------------------------ buttons and inputs (square, flat) */
+.nyl-btn {
+  display: inline-block;
+  font-family: var(--font-body); font-size: 0.95rem; font-weight: 700;
+  padding: 0.55rem 1.1rem;
+  background: var(--btn-bg); color: var(--btn-text);
+  border: 1px solid var(--btn-bg); border-radius: 0;
+  cursor: pointer; text-decoration: none; text-transform: none;
+}
+.nyl-btn:hover { background: var(--btn-hover-bg); border-color: var(--btn-hover-bg); color: var(--btn-hover-text); }
+.nyl-btn--secondary { background: var(--btn-secondary-bg); color: var(--btn-secondary-text); border-color: var(--btn-secondary-border); }
+.nyl-btn--secondary:hover { background: var(--btn-secondary-text); color: var(--bg); border-color: var(--btn-secondary-text); }
+.nyl-btn:focus-visible, .nyl-input:focus-visible, .nyl-select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.nyl-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+.nyl-input, .nyl-select {
+  font-family: var(--font-body); font-size: 0.95rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--input-border); border-radius: 0;
+}
+.nyl-label { display: block; font-size: 0.9rem; margin: 0 0 0.3rem; }
+.nyl-toggle { display: inline-flex; align-items: center; gap: 0.45rem; cursor: pointer; font-size: 0.95rem; }
+.nyl-toggle input { width: 1.05rem; height: 1.05rem; accent-color: var(--nyl-dark-blue); margin: 0; }
+.nyl-dropzone {
+  border: 1px dashed var(--input-border);
+  background: var(--surface);
+  padding: 1.75rem; text-align: center;
+}
+
+/* ------------------------------------------------------------------ tables */
+.nyl-table-wrap { overflow-x: auto; border: 1px solid var(--border); background: var(--surface); }
+.nyl-table { width: 100%; border-collapse: collapse; font-family: var(--font-body); font-size: 0.9rem; color: var(--text); }
+.nyl-table th {
+  background: var(--table-head-bg); color: var(--table-head-text);
+  font-weight: 700; text-align: left;
+  padding: 0.55rem 0.7rem; white-space: nowrap;
+}
+.nyl-table td { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--table-rule); vertical-align: top; }
+.nyl-table th.num, .nyl-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nyl-table tr.is-clickable { cursor: pointer; }
+.nyl-table tr.is-clickable:hover td { background: var(--table-hover); }
+.nyl-table tr.is-total td { font-weight: 700; border-top: 1px solid var(--heading); }
+.nyl-table tr.is-detail td { background: var(--band); }
+
+/* ------------------------------------------------------------------ charts */
+.nyl-chart { width: 100%; height: auto; display: block; }
+.nyl-chart .bar { fill: var(--chart-bar); }
+.nyl-chart .axis { stroke: var(--chart-axis); stroke-width: 1; }
+.nyl-chart text { fill: var(--chart-label); font-family: var(--font-body); font-size: 12px; }
+
+/* ------------------------------------------------------------------ notices, progress, toast */
+.nyl-notice { background: var(--surface); border: 1px solid var(--border); padding: 0.85rem 1rem; }
+.nyl-progress { list-style: none; margin: 0.75rem 0 0; padding: 0; }
+.nyl-progress li { padding: 0.25rem 0; color: var(--text-muted); }
+.nyl-progress li.is-done { color: var(--text); }
+.nyl-toast {
+  position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 50;
+  max-width: 420px; padding: 0.85rem 1.1rem;
+  background: var(--toast-bg); color: var(--toast-text);
+  border: 1px solid var(--toast-bg); border-radius: 0;
+}
+
+/* ------------------------------------------------------------------ Streamlit adapter
+   Only applies inside the Streamlit app (data-testid selectors do not exist in the demo). Used for what
+   the Streamlit theme options cannot express; see design/BRAND.md "Streamlit". */
+[data-testid="stAppViewContainer"] h1, [data-testid="stAppViewContainer"] h2,
+[data-testid="stAppViewContainer"] h3, [data-testid="stAppViewContainer"] h4,
+[data-testid="stHeading"] * {
+  font-family: var(--font-head) !important; font-weight: 400 !important; color: var(--heading);
+}
+[data-testid="stMetricValue"] { font-family: var(--font-head); color: var(--metric); }
