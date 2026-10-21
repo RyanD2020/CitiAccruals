@@ -204,8 +204,9 @@ def followup_email(fu: pd.DataFrame, sender: str) -> str:
         "",
     ]
     for r in fu.to_dict("records"):
-        lines.append(f"  - Series {r['Series']} (maturing {r['Maturity date']:%d-%b-%Y}), "
-                     f"fee due {r['Fee due date']:%d-%b-%Y}: ${r['Expected fee']:,.0f}")
+        mat, due = r["Maturity date"], r["Fee due date"]
+        lines.append(f"  - Series {r['Series']} (maturing {mat.day} {mat:%b %Y}), "
+                     f"fee due {due.day} {due:%b %Y}: ${r['Expected fee']:,.0f}")
     lines += ["", f"Total: ${fu['Expected fee'].sum():,.0f}", "", "Thank you,", sender]
     return "\n".join(lines)
 
