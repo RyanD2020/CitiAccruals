@@ -1,13 +1,54 @@
+# New York Life theme (design/BRAND.md). Options checked against Streamlit 1.66.0, pinned in requirements.txt.
+# Users switch light/dark from the app's settings menu; [theme] holds what both share.
+
 [theme]
-base = "light"
-primaryColor = "#0468FF"
+font = "Arial, Helvetica, sans-serif"
+headingFont = "Georgia, 'Times New Roman', serif"
+headingFontWeights = 400
+baseRadius = "none"
+buttonRadius = "none"
+showWidgetBorder = true
+# Status colours (st.success / st.error / st.warning / st.info) use the chip colours.
+greenTextColor = "#016355"
+greenBackgroundColor = "#A5EFBF"
+redTextColor = "#9B111E"
+redBackgroundColor = "#FBE3E4"
+orangeTextColor = "#6B3B00"
+orangeBackgroundColor = "#FFE8CF"
+yellowTextColor = "#6B3B00"
+yellowBackgroundColor = "#FFE8CF"
+blueTextColor = "#000A62"
+blueBackgroundColor = "#DCEBFF"
+
+[theme.light]
+primaryColor = "#000A62"
 backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F7F7F7"
+secondaryBackgroundColor = "#E3E0DD"
 textColor = "#000000"
-font = "sans serif"
+linkColor = "#0468FF"
+borderColor = "#E3E0DD"
+dataframeBorderColor = "#E3E0DD"
+dataframeHeaderBackgroundColor = "#000A62"
+dataframeHeaderTextColor = "#FFFFFF"
+chartCategoricalColors = ["#000A62", "#0468FF", "#016355", "#A5EFBF"]
+
+[theme.dark]
+# Streamlit always draws primary-button text in white, so dark mode uses Blue buttons rather than the
+# white-with-Dark-Blue-text buttons in BRAND.md (see BRAND.md, "Streamlit").
+primaryColor = "#0468FF"
+backgroundColor = "#000A62"
+secondaryBackgroundColor = "#0A1570"
+textColor = "#FFFFFF"
+linkColor = "#80BAFF"
+borderColor = "#2A3590"
+dataframeBorderColor = "#2A3590"
+dataframeHeaderBackgroundColor = "#111D7C"
+dataframeHeaderTextColor = "#FFFFFF"
+chartCategoricalColors = ["#80BAFF", "#FFFFFF", "#A5EFBF", "#0468FF"]
 
 [server]
 maxUploadSize = 200
 
 [client]
-toolbarMode = "minimal"
+# "viewer" keeps the theme switch in the settings menu and hides developer options.
+toolbarMode = "viewer"

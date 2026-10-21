@@ -1,4 +1,4 @@
-streamlit>=1.40,<2
+streamlit==1.66.0  # theme options and APIs checked against this release
 pandas>=2.1
 altair>=5
 openpyxl>=3.1
