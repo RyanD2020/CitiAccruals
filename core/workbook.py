@@ -22,11 +22,13 @@ from openpyxl.comments import Comment
 from openpyxl.styles import PatternFill
 
 from . import engine
+from .config import TRACKER_YEARS
 from .dates import add_years
 
 DECISIONS = ("apply", "keep", "review")          # apply the correction / keep the tracker's value / needs more review
 CHANGED_FILL = PatternFill("solid", fgColor="DCEBFF")
 TOOL = "Citi fee accruals tool"
+NOT_YET_DUE = "Not yet due"     # written in the invoice column (F); no amount, so neither owed nor paid
 
 KIND_TITLE = {
     "paid_not_recorded": "Billed and paid, but not recorded on this tab",
@@ -34,7 +36,7 @@ KIND_TITLE = {
     "not_billed": "Recorded as paid, but the invoice does not bill this FA",
     "no_fee_due": "Fee accrued, but none is due that year",
     "not_accrued": "Fee due, but not accrued",
-    "not_yet_due": "Fee accrued before it is due",
+    "not_yet_due": "Fee not due yet at the as-of date",
     "missing_row": "FA missing from this tab",
     "other": "Other difference",
 }
@@ -140,7 +142,7 @@ def _desired(fa: int, year: int, lg: pd.DataFrame, invoices: pd.DataFrame, track
         # Billed but not yet paid: the tool keeps it in the accrual, so it must not look paid (ISNUMBER = FALSE).
         return float(e["expected_amount"]), f"{inv} (not yet paid)", approved
     if e["event_date"] > as_of:
-        return None, None, None          # not due yet: accrued when it falls due
+        return None, NOT_YET_DUE, None   # not due yet: no amount until it falls due
     return float(e["expected_amount"]), None, None
 
 
@@ -168,6 +170,8 @@ def _fmt(v, money: bool = False) -> str:
 def describe(cells: tuple) -> str:
     """A tracker row's E/F/G in plain words, e.g. '$3,000, paid on invoice 167355 (15 Jan 2026)'."""
     e, f, g = cells
+    if f == NOT_YET_DUE:
+        return "Not yet due"
     if e is None and f is None:
         return "Not accrued"
     if e == 0 and f in ("N/A", None):
@@ -192,7 +196,11 @@ def _explain(kind, fa, year, tracker, corrected, contract, billed_by: dict, reco
         y2, due = billed_by[(fa, str(int(tf)))]
         where = (f"so it belongs on the {y2} tab" if y2 >= first_year
                  else "which is earlier than the tracker's first tab")
-        return f"Invoice {int(tf)} billed this FA's {y2} fee (due {due.day} {due:%b %Y}), {where}."
+        text = f"Invoice {int(tf)} billed this FA's {y2} fee (due {due.day} {due:%b %Y}), {where}."
+        if cf == NOT_YET_DUE and contract is not None and contract["issue_date"]:
+            anniv = add_years(contract["issue_date"], year - contract["issue_date"].year)
+            text += f" Its {year} fee is not due until {_fmt(anniv)}, so this row shows as not yet due."
+        return text
     if kind == "not_billed":
         return f"Invoice {int(tf)} does not bill this FA, so this fee is not paid."
     if kind == "no_fee_due":
@@ -207,7 +215,10 @@ def _explain(kind, fa, year, tracker, corrected, contract, billed_by: dict, reco
     if kind == "not_accrued":
         return f"The {year} fee is due and Citi has not billed it, so it belongs in the amount owed."
     if kind == "not_yet_due":
-        return f"The {year} fee is not due yet, so it is not accrued until its due date."
+        if contract is not None and contract["issue_date"]:
+            anniv = add_years(contract["issue_date"], year - contract["issue_date"].year)
+            return f"The {year} fee is not due until {_fmt(anniv)}, so it shows as not yet due rather than owed."
+        return f"The {year} fee is not due yet, so it shows as not yet due rather than owed."
     if kind == "missing_row":
         return f"The FA has a {year} fee but no row on this tab."
     return "The tracker and the fee ledger disagree on this row."
@@ -220,12 +231,12 @@ def _kind(tracker, corrected, fa: int, billed_by: dict) -> str:
         return "paid_not_recorded"
     if _is_num(tf) and not (_is_num(cf) and int(cf) == int(tf)):
         return "wrong_tab" if (fa, str(int(tf))) in billed_by else "not_billed"
+    if cf == NOT_YET_DUE:
+        return "not_yet_due"
     if _owed(te, tf) > 0 and ce == 0:
         return "no_fee_due"
     if _owed(te, tf) == 0 and _owed(ce, cf) > 0:
         return "not_accrued"
-    if _owed(te, tf) > 0 and ce is None:
-        return "not_yet_due"
     return "other"
 
 
@@ -240,19 +251,14 @@ def findings(tracker_bytes: bytes, data: dict, as_of: date) -> list[Finding]:
     billed_by = {}  # (FA, invoice) -> (fee year, due date) for what each invoice actually billed
     for r in lines.dropna(subset=["fa_number"]).itertuples():
         billed_by[(int(r.fa_number), str(r.invoice_no))] = (r.action_date.year, r.action_date)
-    dates = Counter()
     recorded_on = {}
     for t in tabs:
         ws = wv[t.title]
         for fa, r in t.rows.items():
-            f, g = ws.cell(r, 6).value, _day(ws.cell(r, 7).value)
+            f = ws.cell(r, 6).value
             if _is_num(f):
                 recorded_on[(fa, int(f))] = t.year
-                if isinstance(g, date):
-                    dates[(str(int(f)), g)] += 1
-    tracker_dates = {}
-    for (inv, g), _ in dates.most_common():
-        tracker_dates.setdefault(inv, g)
+    tracker_dates = _tracker_dates(wv, tabs)
 
     first_year = min((t.year for t in tabs), default=0)
     out = []
@@ -294,25 +300,59 @@ def _finding(t, r, fa, c, tracker, corrected, kind, billed_by, recorded_on, firs
 
 
 # ------------------------------------------------------------------ the corrected workbook
+def _tracker_dates(wv, tabs: list[Tab]) -> dict[str, date]:
+    """Most common 'Date Approved for Payment' the tracker records for each invoice number."""
+    dates = Counter()
+    for t in tabs:
+        ws = wv[t.title]
+        for r in t.rows.values():
+            f, g = ws.cell(r, 6).value, _day(ws.cell(r, 7).value)
+            if _is_num(f) and isinstance(g, date):
+                dates[(str(int(f)), g)] += 1
+    out = {}
+    for (inv, g), _ in dates.most_common():
+        out.setdefault(inv, g)
+    return out
+
+
+def window(tab_years, as_of: date, years: int = TRACKER_YEARS) -> tuple[list[int], list[int]]:
+    """(current years, archived years): the latest `years` tabs up to the as-of year, and everything older."""
+    allyears = sorted(set(tab_years) | set(range(min(tab_years, default=as_of.year), as_of.year + 1)))
+    current = [y for y in allyears if as_of.year - years < y <= as_of.year]
+    return current, [y for y in allyears if y <= as_of.year - years]
+
+
 def corrected_workbook(tracker_bytes: bytes, data: dict, as_of: date, decisions: dict[str, dict],
-                       last_years: int | None = None) -> tuple[bytes, dict]:
+                       view: str = "current") -> tuple[bytes, dict]:
     """Copy of the tracker with every change applied except rows decided "keep" (keep the tracker's value).
 
-    last_years: show only the most recent N year tabs; the amount still owed on dropped tabs stays on the Summary
-    as "Earlier years", because those fees remain in the accrual until they are paid or written off.
-    Returns (xlsx bytes, totals).
+    view: "current" = the latest TRACKER_YEARS year tabs (a tab for the as-of year is built from the ledger if the
+    tracker does not have one yet); "archive" = only the older tabs; "all" = every tab. In "current" the amount still
+    owed on archived tabs stays on the Summary, because those fees stay in the accrual until paid or written off.
+    Returns (xlsx bytes, totals); totals cover every year, whichever view is chosen.
     """
     found = findings(tracker_bytes, data, as_of)
     wb = load_workbook(io.BytesIO(tracker_bytes))
+    wv = load_workbook(io.BytesIO(tracker_bytes), data_only=True)
     tabs = {t.title: t for t in read_tabs(wb)}
-    applied = [f for f in found if decisions.get(f.id, {}).get("decision") != "keep"]
+    lg = _ledger_frame(data, as_of)
+    current, archived = window([t.year for t in tabs.values()], as_of)
 
-    for f in applied:
+    # Year tabs the tracker does not have yet (e.g. 2027 once the as-of date reaches it), built from the latest tab.
+    new_years = [y for y in current if y not in {t.year for t in tabs.values()}]
+    for y in new_years:
+        src = max(tabs.values(), key=lambda t: t.year)
+        t = _new_tab(wb, src, y, lg, data, _tracker_dates(wv, list(tabs.values())), as_of)
+        tabs[t.title] = t
+
+    for f in found:
+        if decisions.get(f.id, {}).get("decision") == "keep":
+            continue
         ws = wb[f.tab]
         t = tabs[f.tab]
         r = f.row
         if r is None:          # add the missing row at the end of the tab's FA block
-            r = _append_row(ws, t, f, data["contracts"].set_index("fa_number").loc[f.fa])
+            r = _append_row(ws, t, f.fa, f.series, data["contracts"].set_index("fa_number").loc[f.fa], f.explanation)
         for col, (old, new) in zip((5, 6, 7), zip(f.tracker, f.corrected)):
             if _same(old, new):
                 continue
@@ -322,32 +362,60 @@ def corrected_workbook(tracker_bytes: bytes, data: dict, as_of: date, decisions:
             cell.comment = Comment(f"Changed from {_fmt(old, money=col == 5)}. {f.explanation}", TOOL)
 
     totals = _totals(wb, tabs, as_of, data)
-    _summary(wb, tabs, as_of, last_years, totals)
-    _changes_sheet(wb, found, decisions)
-    if last_years:
-        keep = sorted({t.year for t in tabs.values()}, reverse=True)[:last_years]
-        for t in tabs.values():
-            if t.year not in keep:
-                del wb[t.title]
+    totals.update(current=current, archived=archived, new_years=new_years)
+    shown = {"current": current, "archive": archived, "all": current + archived}[view]
+    _summary(wb, tabs, as_of, shown, view, totals)
+    _changes_sheet(wb, [f for f in found if f.year in shown], decisions, new_years if view != "archive" else [])
+    for t in tabs.values():
+        if t.year not in shown:
+            del wb[t.title]
+    # Summary, Changes, then the year tabs newest first
+    order = (["Summary", "Changes from tracker"] + [t.title for t in sorted(tabs.values(), key=lambda t: -t.year)
+                                                     if t.year in shown])
+    wb._sheets.sort(key=lambda ws: order.index(ws.title) if ws.title in order else len(order))
+    wb.active = 0
     wb.calculation.fullCalcOnLoad = True
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue(), totals
 
 
-def _append_row(ws, t: Tab, f: Finding, c) -> int:
+def _new_tab(wb, src: Tab, year: int, lg: pd.DataFrame, data: dict, tracker_dates: dict, as_of: date) -> Tab:
+    """A tab for a year the tracker does not have, copied from the latest tab and filled from the ledger."""
+    ws = wb.copy_worksheet(wb[src.title])
+    ws.title = src.title.replace(str(src.year), str(year))
+    ws.cell(src.first_row - 2, 5, year)               # the year in the header row
+    t = Tab(ws.title, year, src.short_name, src.first_row, src.last_row, dict(src.rows), src.all_row, src.paid_row,
+            src.owed_row)
+    for fa, r in t.rows.items():
+        e, f, g = _desired(fa, year, lg, data["invoices"], tracker_dates, as_of)
+        for col, v in zip((5, 6, 7), (e, f, g)):
+            ws.cell(r, col).value = v
+            ws.cell(r, col).comment = None
+    codes = set(data["programs"].loc[data["programs"]["short_name"] == t.short_name, "program_code"])
+    contracts = data["contracts"].set_index("fa_number")
+    extra = lg[(lg["fee_year"] == year) & lg["program_code"].isin(codes) & ~lg["fa_number"].isin(set(t.rows))]
+    for fa in sorted(set(extra["fa_number"].astype(int))):
+        r = _append_row(ws, t, fa, str(contracts.loc[fa, "series"]), contracts.loc[fa],
+                        f"New agreement with a {year} fee.")
+        for col, v in zip((5, 6, 7), _desired(fa, year, lg, data["invoices"], tracker_dates, as_of)):
+            ws.cell(r, col).value = v
+    return t
+
+
+def _append_row(ws, t: Tab, fa: int, series: str, c, why: str) -> int:
     r = t.last_row + 1
     ws.insert_rows(r)
     for col in range(1, 9):     # copy the row style from the row above
         ws.cell(r, col)._style = ws.cell(r - 1, col)._style
-    ws.cell(r, 1, f.series)
-    ws.cell(r, 2, f.fa)
+    ws.cell(r, 1, series)
+    ws.cell(r, 2, fa)
     ws.cell(r, 3, c["issue_date"])
     ws.cell(r, 4, c["maturity_date"])
     ws.cell(r, 8, f"=ISNUMBER(F{r})")
     for col in (1, 2, 3, 4):
         ws.cell(r, col).fill = CHANGED_FILL
-    ws.cell(r, 1).comment = Comment(f"Row added. {f.explanation}", TOOL)
+    ws.cell(r, 1).comment = Comment(f"Row added. {why}", TOOL)
     # The total block moved down one row; rewrite its formulas for the new range.
     t.last_row += 1
     t.all_row, t.paid_row, t.owed_row = (x + 1 if x else x for x in (t.all_row, t.paid_row, t.owed_row))
@@ -355,7 +423,7 @@ def _append_row(ws, t: Tab, f: Finding, c) -> int:
         ws.cell(t.all_row, 5, f"=SUM(E{t.first_row}:E{t.last_row})")
     if t.owed_row and t.all_row and t.paid_row:
         ws.cell(t.owed_row, 5, f"=E{t.all_row}-E{t.paid_row}")
-    t.rows[f.fa] = r
+    t.rows[fa] = r
     return r
 
 
@@ -372,33 +440,34 @@ def _totals(wb, tabs: dict[str, Tab], as_of: date, data: dict) -> dict:
     return {"by_year": by_year, "corrected_total": round(sum(by_year.values()), 2), "ledger_total": ledger_owed}
 
 
-def _summary(wb, tabs: dict[str, Tab], as_of: date, last_years: int | None, totals: dict) -> None:
+def _summary(wb, tabs: dict[str, Tab], as_of: date, shown: list[int], view: str, totals: dict) -> None:
     if "Summary" not in wb.sheetnames:
         return
     ws = wb["Summary"]
-    for r in range(2, 12):
-        for col in (1, 2):
+    for r in range(2, 14):
+        for col in (1, 2, 3):
             ws.cell(r, col).value = None
-    ws.cell(2, 1, f"Corrected by the {TOOL} at {as_of.day} {as_of:%B %Y}. Every change is listed on the "
-                  "'Changes from tracker' sheet.")
-    ordered = sorted(tabs.values(), key=lambda t: t.year, reverse=True)
-    shown = ordered[:last_years] if last_years else ordered
+    note = (f"Archived year tabs, as of {as_of.day} {as_of:%B %Y}. The current workbook keeps the latest "
+            f"{TRACKER_YEARS} years." if view == "archive" else
+            f"Corrected by the {TOOL} at {as_of.day} {as_of:%B %Y}. Every change is listed on the "
+            "'Changes from tracker' sheet.")
+    ws.cell(2, 1, note)
     r = 4
-    for t in shown:
+    for t in sorted((t for t in tabs.values() if t.year in shown), key=lambda t: -t.year):
         ws.cell(r, 1, t.year)
         ws.cell(r, 2, f"='{t.title}'!E{t.owed_row}")
         r += 1
-    earlier = round(sum(totals["by_year"][t.year] for t in ordered[len(shown):]), 2)
-    if earlier:
-        ws.cell(r, 1, "Earlier years")
-        ws.cell(r, 2, earlier)
-        ws.cell(r, 3, "Still in the accrual until paid or written off; their tabs are not shown.")
+    archived = round(sum(v for y, v in totals["by_year"].items() if y not in shown), 2)
+    if view == "current" and archived:
+        ws.cell(r, 1, "Archived years")
+        ws.cell(r, 2, archived)
+        ws.cell(r, 3, "Still in the accrual until paid or written off; the tabs are in the archive workbook.")
         r += 1
-    ws.cell(r, 1, "Total accrual")
-    ws.cell(r, 2, f"=SUM(B4:B{r - 1})")
+    ws.cell(r, 1, "Total accrual" if view != "archive" else "Total owed on archived tabs")
+    ws.cell(r, 2, f"=SUM(B4:B{r - 1})" if r > 4 else 0)
 
 
-def _changes_sheet(wb, found: list[Finding], decisions: dict[str, dict]) -> None:
+def _changes_sheet(wb, found: list[Finding], decisions: dict[str, dict], new_years: list[int]) -> None:
     ws = wb.create_sheet("Changes from tracker", 1)
     head = ["Tab", "Row", "Series #", "FA #", "Change", "Field", "Tracker value", "Corrected value",
             "Effect on amount owed", "Why", "Decision", "Decided by", "Note"]
@@ -412,6 +481,10 @@ def _changes_sheet(wb, found: list[Finding], decisions: dict[str, dict]) -> None
                        f.effect if i == 0 else None, f.explanation if i == 0 else None,
                        label.get(d.get("decision"), "Suggested, not yet decided (applied)"),
                        d.get("by"), d.get("note")])
+    for y in new_years:
+        ws.append([y, None, None, None, "New year tab", None, None, None, None,
+                   f"The tracker has no {y} tab, so the tool built it from the latest tab with values from the fee "
+                   "ledger.", None, None, None])
     for col, w in zip("ABCDEFGHIJKLM", (8, 8, 12, 9, 40, 14, 16, 18, 12, 70, 30, 28, 40)):
         ws.column_dimensions[col].width = w
     for (cell,) in ws.iter_rows(min_row=2, min_col=9, max_col=9):

@@ -67,3 +67,7 @@ INVOICE_EXPECTED_DAYS_AFTER_QUARTER = 25
 FOLLOW_UP_GRACE_DAYS = 30
 
 CITI_BILLING_EMAIL = "gatsbilling@citi.com"
+
+# The tracker workbook keeps the latest three year tabs; older tabs move to an archive workbook (confirmed by Finance,
+# 27 Oct 2026). This only changes what the workbook shows: fees stay in the accrual until paid or written off.
+TRACKER_YEARS = 3

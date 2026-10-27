@@ -121,6 +121,10 @@ def _run(zip_path: str, tmp: str, log) -> dict:
     assert abs(tot_keep["corrected_total"] - (tot["corrected_total"] - big.effect)) < 0.005, (tot_keep, big.effect)
     assert len(svc.db.read("audit_log").query("action == 'decide'")) == 1
     svc.decide_tracker_rows("tester", {big.id: (None, None)}, "test")
+    # From 2027 the workbook keeps three year tabs: a 2027 tab is built, 2024 moves to the archive, totals still tie.
+    _, tot27 = workbook.corrected_workbook(trk, data, date(2027, 1, 31), {}, view="current")
+    assert tot27["new_years"] == [2027] and tot27["archived"] == [2024], tot27
+    assert tot27["corrected_total"] == tot27["ledger_total"], tot27
     metrics.update(tracker_rows_total=workbook.tracker_total(trk), tracker_findings=len(found),
                    corrected_workbook_total=tot["corrected_total"])
     log("Tracker clean-up:", len(found), "rows differ; corrected workbook total", tot["corrected_total"])
