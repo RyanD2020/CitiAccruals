@@ -38,20 +38,20 @@ if not found:
     st.stop()
 
 tracker_owed = workbook.tracker_total(raw)
+_, totals = workbook.corrected_workbook(raw, d, as_of, decisions, view="all")
 kept = [f for f in found if decisions.get(f.id, {}).get("decision") == "keep"]
 decided = [f for f in found if f.id in decisions]
 review = [f for f in found if decisions.get(f.id, {}).get("decision") == "review"]
-corrected_owed = tracker_owed + sum(f.effect for f in found if f not in kept)
-tool_owed = tracker_owed + sum(f.effect for f in found)
 ui.kpi_cards([
     ("Old tracker owes", ui.money(tracker_owed), name),
-    ("Corrected workbook owes", ui.money(corrected_owed), f"{len(found) - len(kept)} of {len(found)} changes applied"),
-    ("Tool accrual", ui.money(tool_owed), f"at {ui.fmt_date(as_of)}"),
+    ("Corrected workbook owes", ui.money(totals["corrected_total"]),
+     f"{len(found) - len(kept)} of {len(found)} changes applied"),
+    ("Tool accrual", ui.money(totals["ledger_total"]), f"at {ui.fmt_date(as_of)}"),
     ("Rows decided", f"{len(decided)} of {len(found)}", f"{len(review)} need more review" if review else "none waiting"),
 ])
 if kept:
-    st.caption(f"Rows kept at the tracker's value leave {ui.money(corrected_owed - tool_owed)} between the corrected "
-               "workbook and the tool.")
+    st.caption(f"Rows kept at the tracker's value leave {ui.money(totals['corrected_total'] - totals['ledger_total'])} "
+               "between the corrected workbook and the tool.")
 
 LABEL = {None: "Not decided", "apply": "Apply", "keep": "Keep current", "review": "Needs more review"}
 CODE = {v: k for k, v in LABEL.items()}
@@ -98,6 +98,29 @@ for kind in ORDER:
         st.rerun()
 
 st.divider()
+st.subheader("Decide several rows at once")
+st.caption("For answers given by invoice or series, for example every row involving invoice 167355.")
+q = st.text_input("Rows mentioning", placeholder="Invoice, series or FA, e.g. 167355 or 2018-8")
+match = [f for f in found if q and q.strip().lower() in
+         " ".join([f.series, str(f.fa), workbook.describe(f.tracker), workbook.describe(f.corrected),
+                   f.explanation]).lower()]
+with st.form("bulk_decide"):
+    pick = st.multiselect(f"Rows ({len(match)} found)", [f.id for f in match], default=[f.id for f in match],
+                          format_func=lambda i: next(f"{f.year} tab, {f.series} (FA {f.fa}): {f.title}"
+                                                     for f in match if f.id == i))
+    b1, b2 = st.columns([1, 2])
+    bulk = b1.selectbox("Decision", ["Apply", "Keep current", "Needs more review"])
+    bulk_note = b2.text_input("Note (shown on the Changes sheet)")
+    if st.form_submit_button("Record for the selected rows", type="primary", disabled=not match):
+        if not pick or not bulk_note:
+            st.error("Choose rows and add a note, for example the team's answer.")
+        else:
+            n = svc.decide_tracker_rows(ui.user(), {i: (CODE[bulk], bulk_note) for i in pick}, bulk_note)
+            ui.refresh()
+            st.success(f"{n} decision(s) recorded.")
+            st.rerun()
+
+st.divider()
 with st.form("save_decisions"):
     st.markdown(f"**{len(pending)} unsaved decision(s)**" if pending else "**No unsaved decisions**")
     reason = st.text_input("Reason (saved to the audit log)", placeholder="e.g. Reviewed with the business owner")
@@ -113,11 +136,18 @@ with st.form("save_decisions"):
 st.subheader("Download the corrected workbook")
 st.write("Rows marked Keep current keep the tracker's value; every other change is applied and highlighted, with a "
          "comment on each changed cell. The 'Changes from tracker' sheet lists every row and its decision.")
-years = st.radio("Year tabs", ["All years", "Last three years"], horizontal=True,
-                 help="Whether to keep only three years is still to be confirmed by Finance. This only changes which "
-                      "tabs the workbook shows: amounts still owed on older tabs stay on the Summary, because they stay "
-                      "in the accrual until they are paid or written off.")
-xlsx, totals = workbook.corrected_workbook(raw, d, as_of, decisions, last_years=3 if years != "All years" else None)
-st.download_button("Download corrected workbook", xlsx, type="primary",
+view = st.radio("Year tabs", ["Current workbook", "All years"], horizontal=True,
+                help=f"The current workbook keeps the latest {workbook.TRACKER_YEARS} year tabs (Finance, 27 Oct 2026); "
+                     "older tabs go to the archive workbook. Amounts still owed on archived tabs stay on the Summary, "
+                     "because they stay in the accrual until they are paid or written off.")
+xlsx, totals = workbook.corrected_workbook(raw, d, as_of, decisions, view="current" if view == "Current workbook" else "all")
+a1, a2 = st.columns(2)
+a1.download_button("Download corrected workbook", xlsx, type="primary", width="stretch",
                    file_name=f"Citigroup Accrued Expenses corrected {as_of.isoformat()}.xlsx")
-st.caption(f"Corrected total {ui.money(totals['corrected_total'])}; tool accrual {ui.money(totals['ledger_total'])}.")
+if totals["archived"]:
+    arch, _ = workbook.corrected_workbook(raw, d, as_of, decisions, view="archive")
+    years = ", ".join(str(y) for y in totals["archived"])
+    a2.download_button(f"Download archive ({years})", arch, width="stretch",
+                       file_name=f"Citigroup Accrued Expenses archive {years} {as_of.isoformat()}.xlsx")
+st.caption(f"Corrected total {ui.money(totals['corrected_total'])}; tool accrual {ui.money(totals['ledger_total'])}."
+           + (f" New tab built for {', '.join(str(y) for y in totals['new_years'])}." if totals["new_years"] else ""))
